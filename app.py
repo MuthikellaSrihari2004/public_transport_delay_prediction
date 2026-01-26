@@ -13,6 +13,9 @@ sys.path.append(os.getcwd())
 
 import config
 
+# Ensure directories exist (Critical for Gunicorn/Render)
+config.ensure_directories()
+
 try:
     from src.database.queries import TransportDB
     from src.models.engine import ENGINE
@@ -24,7 +27,10 @@ except ImportError:
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "hyder-transit-secret-key")
 
+# Initialize DB with explicit check
 DB = TransportDB()
+if not os.path.exists(config.DB_PATH):
+    print(f"CRITICAL WARNING: Database file not found at {config.DB_PATH}")
 
 # Route: Home Page
 @app.route('/')
