@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+    <h1>Transit Analytics</h1>
+    <p>Predictive insights and historical performance metrics for the Hyderabad transit network.</p>
+</section>
+
+<div class="dashboard-layout">
+    <div class="glass-card">
+        <h3>Network Performance</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem;">Real-time accuracy and delay
+            distribution across modes.</p>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+            <div class="prediction-card">
+                <div class="card-header">Model Accuracy</div>
+                <div class="card-value" style="color: var(--success);">94.2%</div>
+                <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 5px;">Based on last 500 predictions
+                </div>
+            </div>
+            <div class="prediction-card">
+                <div class="card-header">Avg. System Delay</div>
+                <div class="card-value" style="color: var(--warning);"> +8.5m</div>
+                <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 5px;">All modes combined</div>
+            </div>
+        </div>
+
+        <div style="margin-top: 3rem;">
+            <h4 style="margin-bottom: 1.5rem;">Delay Frequency by Hour</h4>
+            <!-- Mock Bar Chart -->
+            <div
+                style="display: flex; align-items: flex-end; gap: 10px; height: 200px; padding-bottom: 20px; border-bottom: 1px solid var(--glass-border);">
+                <!-- 8am -->
+                <div
+                    style="flex: 1; background: var(--accent); height: 80%; border-radius: 4px 4px 0 0; position: relative;">
+                    <span
+                        style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); font-size: 0.6rem;">08h</span>
+                </div>
+                <!-- 10am -->
+                <div
+                    style="flex: 1; background: var(--accent); height: 100%; border-radius: 4px 4px 0 0; position: relative;">
+                    <span
+                        style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); font-size: 0.6rem;">10h</span>
+                </div>
+                <!-- 12pm -->
+                <div
+                    style="flex: 1; background: var(--accent); height: 40%; border-radius: 4px 4px 0 0; position: relative;">
+                    <span
+                        style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); font-size: 0.6rem;">12h</span>
+                </div>
+                <!-- 2pm -->
+                <div
+                    style="flex: 1; background: var(--accent); height: 30%; border-radius: 4px 4px 0 0; position: relative;">
+                    <span
+                        style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); font-size: 0.6rem;">14h</span>
+                </div>
+                <!-- 4pm -->
+                <div
+                    style="flex: 1; background: var(--accent); height: 60%; border-radius: 4px 4px 0 0; position: relative;">
+                    <span
+                        style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); font-size: 0.6rem;">16h</span>
+                </div>
+                <!-- 6pm -->
+                <div
+                    style="flex: 1; background: var(--accent); height: 95%; border-radius: 4px 4px 0 0; position: relative;">
+                    <span
+                        style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); font-size: 0.6rem;">18h</span>
+                </div>
+                <!-- 8pm -->
+                <div
+                    style="flex: 1; background: var(--accent); height: 75%; border-radius: 4px 4px 0 0; position: relative;">
+                    <span
+                        style="position: absolute; bottom: -25px; left: 50%; transform: translateX(-50%); font-size: 0.6rem;">20h</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card">
+        <h3>Operational Insights</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem;">Top factors contributing to service
+            variations.</p>
+
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <div
+                style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <span style="font-size: 0.8rem; font-weight: 700;">Rain Impact</span>
+                    <span style="font-size: 0.8rem; color: var(--danger);">+45% Delay</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px;">
+                    <div style="width: 45%; height: 100%; background: var(--danger); border-radius: 3px;"></div>
+                </div>
+            </div>
+
+            <div
+                style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <span style="font-size: 0.8rem; font-weight: 700;">Peak Hour Load</span>
+                    <span style="font-size: 0.8rem; color: var(--warning);">+32% Delay</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px;">
+                    <div style="width: 32%; height: 100%; background: var(--warning); border-radius: 3px;"></div>
+                </div>
+            </div>
+
+            <div
+                style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <span style="font-size: 0.8rem; font-weight: 700;">Event Congestion</span>
+                    <span style="font-size: 0.8rem; color: var(--accent);">+28% Delay</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px;">
+                    <div style="width: 28%; height: 100%; background: var(--accent); border-radius: 3px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div
+            style="margin-top: 2rem; padding: 1.5rem; background: rgba(56, 189, 248, 0.05); border-radius: 20px; border: 1px dashed var(--accent);">
+            <div style="display: flex; gap: 15px;">
+                <i data-lucide="lightbulb" style="color: var(--accent);"></i>
+                <div>
+                    <div style="font-weight: 800; font-size: 0.9rem; color: var(--accent);">AI System Recommendation
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 5px;">Increasing Metro frequency
+                        between 17:00 and 19:00 can reduce overall network pressure by 12%.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .prediction-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--glass-border);
+        padding: 1.5rem;
+        border-radius: 20px;
+    }
+
+    .card-header {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        font-weight: 800;
+        margin-bottom: 10px;
+    }
+
+    .card-value {
+        font-size: 2rem;
+        font-weight: 900;
+    }
+</style>
+{% endblock %}

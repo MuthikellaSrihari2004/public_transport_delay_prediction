@@ -1,0 +1,688 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Main Head Station -->
+<section class="hero">
+    <h1>Smart Delay Tracking</h1>
+    <p>AI-Predicted travel intelligence for Hyderabad. Accurate, realistic, and data-driven.</p>
+</section>
+
+<!-- Live Network Sensors -->
+{% if live_env %}
+<div class="sensor-bar">
+    <div class="sensor-chip active">
+        <i data-lucide="thermometer" size="18"></i>
+        <span>{{ live_env.weather.temp }}°C</span>
+    </div>
+    <div class="sensor-chip">
+        <i data-lucide="cloud" size="18"></i>
+        <span>{{ live_env.weather.description }}</span>
+    </div>
+    <div
+        class="sensor-chip {% if live_env.traffic == 'High' or live_env.traffic == 'Very High' %}active-danger{% endif %}">
+        <i data-lucide="activity" size="18"></i>
+        <span>Traffic: {{ live_env.traffic }}</span>
+    </div>
+    <div class="sensor-chip">
+        <i data-lucide="calendar" size="18"></i>
+        <span>{{ live_env.ctx.day_type }}</span>
+    </div>
+    {% if live_env.is_holiday %}
+    <div class="sensor-chip active chip-holiday">
+        <i data-lucide="party-popper" size="18"></i>
+        <span>{{ live_env.holiday_name }}</span>
+    </div>
+    {% endif %}
+
+    {% if live_env.event_flag %}
+    <div class="sensor-chip active chip-event">
+        <i data-lucide="alert-triangle" size="18"></i>
+        <span>Local Event Active</span>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+
+<!-- Search Engine -->
+<div class="glass-card">
+    <form action="/search" method="POST" class="form-grid">
+        <div class="input-group">
+            <label class="input-label">Origin</label>
+            <input type="text" name="from_location" id="origin-input" class="input-field" placeholder="Secunderabad"
+                value="{{ from_loc if from_loc else '' }}" required autocomplete="off">
+            <div id="origin-suggestions" class="autocomplete-suggestions"></div>
+        </div>
+        <div class="input-group">
+            <label class="input-label">Destination</label>
+            <input type="text" name="to_location" id="dest-input" class="input-field" placeholder="Koti"
+                value="{{ to_loc if to_loc else '' }}" required autocomplete="off">
+            <div id="dest-suggestions" class="autocomplete-suggestions"></div>
+        </div>
+        <div class="input-group">
+            <label class="input-label">Date</label>
+            <input type="date" name="travel_date" id="travel_date" class="input-field"
+                value="{{ travel_date if travel_date else '2026-01-26' }}" required>
+        </div>
+        <div class="input-group">
+            <label class="input-label">Mode</label>
+            <select name="transport_type" class="input-field">
+                <option value="Bus" {% if t_type=='Bus' %}selected{% endif %}>Bus (TSRTC)</option>
+                <option value="Metro" {% if t_type=='Metro' %}selected{% endif %}>Metro</option>
+                <option value="Train" {% if t_type=='Train' %}selected{% endif %}>MMTS Train</option>
+            </select>
+        </div>
+        <button type="submit" class="btn-primary col-span-full">Analyze Schedules</button>
+    </form>
+</div>
+
+{% if error %}
+<div class="glass-card card-error">
+    <p class="text-error">{{ error }}</p>
+</div>
+{% endif %}
+
+<!-- Results Dashboard -->
+<div id="main-content-layout" class="dashboard-layout {% if not schedules %}single{% endif %}">
+
+    {% if schedules %}
+    <div id="results-panel">
+        <h3 class="panel-header">
+            <i data-lucide="zap" class="mode-highlighter"></i> AI-Optimized Real-time Schedules
+        </h3>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Mode</th>
+                        <th>ID</th>
+                        <th>Start</th>
+                        <th>Reach</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in schedules %}
+                    <tr class="service-row" data-id="{{ s.id }}">
+                        <td>{{ s.Transport_Type }}</td>
+                        <td style="font-family: monospace; font-weight: 700;">{{ s.Service_ID }}</td>
+                        <td>{{ s.Scheduled_Departure }}</td>
+                        <td style="font-weight: 800; color: #fff;">
+                            {{ s.prediction.predicted_arrival }}
+                        </td>
+                        <td>
+                            <span class="risk-badge risk-{{ s.prediction.risk_level|lower }}">
+                                {{ s.prediction.status_text }}
+                                {% if s.prediction.is_live %}
+                                <span class="live-dot"></span>
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn-primary btn-small" onclick="viewPrediction('{{ s.id }}')">
+                                View
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Real-time Prediction Dashboard -->
+    <div id="detail-panel">
+        <div class="glass-card relative">
+            <div id="detail-loading" class="loading-overlay">
+                <div class="loader-content">
+                    <i data-lucide="brain" class="pulse"></i>
+                    <span>AI CALIBRATING...</span>
+                </div>
+            </div>
+
+            <div class="dashboard-header">
+                <h2 id="detail-service-id">--</h2>
+                <div id="detail-route-label" class="text-dim">-- → --</div>
+            </div>
+
+            <!-- Big Prediction Cards Grid -->
+            <div class="prediction-grid">
+                <div class="prediction-card delay-card">
+                    <div class="card-header">AI Predicted Delay</div>
+                    <div class="card-value val-accent" id="res-delay">--</div>
+                    <div class="risk-badge" id="res-risk">--</div>
+                </div>
+
+                <div class="prediction-card alternative-card">
+                    <div class="card-header">Optimal Alternative</div>
+                    <div class="card-value mode-highlighter" id="res-best-mode">--</div>
+                </div>
+
+                <div class="prediction-card reason-card col-full bg-subtle">
+                    <div class="card-header">Primary Reason</div>
+                    <div class="card-value value-lg" id="res-reason">--</div>
+                </div>
+
+                <div class="prediction-card advisory-card col-full">
+                    <div class="card-header">Smart Advisory</div>
+                    <div class="advisory-text" id="res-rec">--</div>
+                </div>
+
+                <!-- NEW: Real-time Telemetry Section -->
+                <div class="prediction-card telemetry-card col-full border-dashed mt-4">
+                    <div class="card-header">Model Input Telemetry (Real-time)</div>
+                    <div class="tele-grid">
+                        <div class="tele-item">
+                            <small>WEATHER</small>
+                            <div id="tele-weather" class="val-accent">--</div>
+                        </div>
+                        <div class="tele-item">
+                            <small>TRAFFIC PRESSURE</small>
+                            <div id="tele-traffic" class="val-warning">--</div>
+                        </div>
+                        <div class="tele-item">
+                            <small>PASSENGER LOAD</small>
+                            <div id="tele-load" class="val-secondary">--%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="timeline-section">
+                <h3 class="timeline-title">Journey Tracker</h3>
+                <div class="timeline-elite" id="res-timeline">
+                    <!-- Stops -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Premium Dashboard Styles */
+    .dashboard-header {
+        border-bottom: 1px solid var(--glass-border);
+        padding-bottom: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    #detail-service-id {
+        font-size: 3rem;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+    .prediction-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+    }
+
+    .prediction-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--glass-border);
+        padding: 1.5rem;
+        border-radius: 20px;
+        transition: var(--transition);
+    }
+
+    .prediction-card:hover {
+        transform: translateY(-4px);
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    .card-header {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        font-weight: 800;
+        letter-spacing: 1px;
+        margin-bottom: 10px;
+    }
+
+    .card-value {
+        font-size: 2.25rem;
+        font-weight: 900;
+        color: #fff;
+    }
+
+    .risk-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 0.7rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-top: 8px;
+    }
+
+    .risk-low {
+        background: rgba(16, 185, 129, 0.1);
+        color: var(--success);
+        border: 1px solid var(--success);
+    }
+
+    .risk-medium {
+        background: rgba(245, 158, 11, 0.1);
+        color: var(--warning);
+        border: 1px solid var(--warning);
+    }
+
+    .risk-high {
+        background: rgba(239, 68, 68, 0.1);
+        color: var(--danger);
+        border: 1px solid var(--danger);
+    }
+
+    .live-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #fff;
+        margin-left: 6px;
+        animation: breathe 1.5s infinite alternate;
+        box-shadow: 0 0 10px #fff;
+    }
+
+    @keyframes breathe {
+        from {
+            opacity: 0.3;
+            transform: scale(0.8);
+        }
+
+        to {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+    }
+
+    .mode-highlighter {
+        color: var(--accent);
+    }
+
+    .advisory-text {
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: var(--text-dim);
+        line-height: 1.5;
+        border-left: 4px solid var(--accent);
+        padding-left: 1rem;
+    }
+
+    .loading-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(2, 6, 23, 0.9);
+        z-index: 100;
+        border-radius: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(10px);
+    }
+
+    .loader-content {
+        text-align: center;
+    }
+
+    .pulse {
+        animation: pulseAnim 1s infinite alternate;
+        width: 40px;
+        margin-bottom: 1rem;
+        color: var(--accent);
+    }
+
+    @keyframes pulseAnim {
+        from {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        to {
+            transform: scale(1.2);
+            opacity: 0.5;
+        }
+    }
+
+    .timeline-elite {
+        position: relative;
+        padding-left: 2rem;
+        border-left: 4px solid rgba(255, 255, 255, 0.05);
+        margin-left: 10px;
+    }
+
+    .stop-node {
+        position: relative;
+        padding-bottom: 2.5rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 1.5rem;
+    }
+
+    .stop-marker {
+        position: absolute;
+        left: -12px;
+        top: 6px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #1e293b;
+        border: 3px solid #475569;
+        z-index: 2;
+        transition: all 0.4s ease;
+    }
+
+    .stop-node.passed .stop-marker {
+        background: var(--success);
+        border-color: var(--success);
+    }
+
+    .stop-node.passed::after {
+        content: '';
+        position: absolute;
+        left: -10px;
+        top: 14px;
+        height: 100%;
+        width: 4px;
+        background: var(--success);
+        z-index: 1;
+    }
+
+    .stop-node.active .stop-marker {
+        background: var(--accent);
+        border-color: #fff;
+        box-shadow: 0 0 15px var(--accent);
+        transform: scale(1.4);
+    }
+
+    .live-status-icon {
+        position: absolute;
+        left: -35px;
+        top: 0px;
+        z-index: 10;
+        background: var(--accent);
+        color: #fff;
+        padding: 6px;
+        border-radius: 50%;
+        box-shadow: 0 0 20px var(--accent);
+        animation: pulseLive 2s infinite;
+    }
+
+    @keyframes pulseLive {
+        0% {
+            box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7);
+            transform: scale(1);
+        }
+
+        50% {
+            box-shadow: 0 0 0 15px rgba(56, 189, 248, 0);
+            transform: scale(1.1);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+            transform: scale(1);
+        }
+    }
+
+    .stop-info {
+        flex: 1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.02);
+        padding: 1rem 1.5rem;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .ctx-peak-high {
+        border-color: var(--danger);
+        color: var(--danger);
+    }
+
+    .ctx-peak-low {
+        border-color: var(--success);
+        color: var(--success);
+    }
+
+    @media (max-width: 768px) {
+        .prediction-grid {
+            grid-template-columns: 1fr;
+        }
+
+        #detail-service-id {
+            font-size: 2rem;
+        }
+    }
+
+    /* Refactored Internal CSS */
+    .chip-holiday {
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+
+    .chip-event {
+        border-color: var(--warning);
+        color: var(--warning);
+    }
+
+    .col-span-full {
+        grid-column: 1 / -1;
+    }
+
+    .card-error {
+        margin-top: 2rem;
+        border-color: var(--danger);
+        text-align: center;
+    }
+
+    .text-error {
+        color: var(--danger);
+        font-weight: 700;
+    }
+
+    .panel-header {
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .btn-small {
+        padding: 8px 12px;
+        font-size: 0.7rem;
+        width: auto;
+    }
+
+    #detail-panel,
+    #detail-loading {
+        display: none;
+    }
+
+    .relative {
+        position: relative;
+    }
+
+    .text-dim {
+        color: var(--text-dim);
+    }
+
+    .col-full {
+        grid-column: 1 / -1;
+    }
+
+    .bg-subtle {
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .value-lg {
+        font-size: 1.25rem;
+    }
+
+    .border-dashed {
+        border: 1px dashed var(--glass-border);
+    }
+
+    .mt-4 {
+        margin-top: 1rem;
+    }
+
+    .tele-grid {
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+        margin-top: 10px;
+    }
+
+    .val-accent {
+        font-weight: 700;
+        color: var(--accent);
+    }
+
+    .val-warning {
+        font-weight: 700;
+        color: var(--warning);
+    }
+
+    .val-secondary {
+        font-weight: 700;
+        color: var(--accent-secondary);
+    }
+
+    .timeline-section {
+        margin-top: 3rem;
+    }
+
+    .timeline-title {
+        font-size: 1.1rem;
+        margin-bottom: 1.5rem;
+        font-weight: 700;
+    }
+</style>
+
+<script>
+    const locations = ["Secunderabad", "Koti", "Mehdipatnam", "Charminar", "Ameerpet", "Hitech City", "Gachibowli", "Miyapur", "Uppal", "L.B. Nagar"];
+
+    function setupAuto(inputId, sugId) {
+        const i = document.getElementById(inputId);
+        const s = document.getElementById(sugId);
+        if (!i || !s) return;
+        i.addEventListener('input', () => {
+            const v = i.value.toLowerCase();
+            s.innerHTML = '';
+            if (v.length > 0) {
+                const f = locations.filter(l => l.toLowerCase().includes(v));
+                if (f.length > 0) {
+                    s.style.display = 'block';
+                    f.forEach(l => {
+                        const d = document.createElement('div');
+                        d.className = 'suggestion-item';
+                        d.textContent = l;
+                        d.onclick = () => { i.value = l; s.style.display = 'none'; };
+                        s.appendChild(d);
+                    });
+                } else s.style.display = 'none';
+            } else s.style.display = 'none';
+        });
+    }
+
+    setupAuto('origin-input', 'origin-suggestions');
+    setupAuto('dest-input', 'dest-suggestions');
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const resultsPanel = document.getElementById('results-panel');
+        const target = document.getElementById('main-content-layout');
+        if (resultsPanel && target) {
+            setTimeout(function () {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 400);
+        }
+    });
+
+    async function viewPrediction(id) {
+        const layout = document.getElementById('main-content-layout');
+        const detail = document.getElementById('detail-panel');
+        const loader = document.getElementById('detail-loading');
+        const date = document.getElementById('travel_date').value;
+
+        detail.style.display = 'block';
+        loader.style.display = 'flex';
+
+        document.querySelectorAll('.service-row').forEach(r => r.style.background = 'transparent');
+        const active = document.querySelector('.service-row[data-id="' + id + '"]');
+        if (active) active.style.background = 'rgba(56,189,248,0.1)';
+
+        try {
+            const res = await fetch('/api/track/' + id + '?date=' + date);
+            const data = await res.json();
+
+            // Populate Main Header with Start/Reach Times
+            document.getElementById('detail-service-id').innerHTML = data.service.Service_ID +
+                '<span style="font-size: 1rem; margin-left: 15px; color: var(--text-dim);">' +
+                data.info.Start_Time + ' <i data-lucide="arrow-right" style="vertical-align:middle; width:14px;"></i> ' + data.info.Reach_Time +
+                '</span>';
+
+            document.getElementById('detail-route-label').textContent = data.service.From_Location + ' \u2192 ' + data.service.To_Location;
+
+            document.getElementById('res-delay').textContent = '+' + data.insights.predicted_delay + 'm';
+            document.getElementById('res-best-mode').textContent = data.insights.best_mode;
+            document.getElementById('res-reason').textContent = data.insights.reason;
+            document.getElementById('res-rec').textContent = data.insights.recommendation;
+
+            // Populate Telemetry
+            document.getElementById('tele-weather').textContent = data.insights.weather.description + ' (' + data.insights.weather.temp + '\u00B0C)';
+            document.getElementById('tele-traffic').textContent = data.insights.traffic;
+            document.getElementById('tele-load').textContent = data.insights.load + '%';
+
+            const risk = document.getElementById('res-risk');
+            risk.textContent = data.insights.risk_level + ' Risk';
+            risk.className = 'risk-badge risk-' + data.insights.risk_level.toLowerCase();
+
+            const tm = document.getElementById('res-timeline');
+            tm.innerHTML = '';
+            data.stops.forEach(function (st) {
+                var node = document.createElement('div');
+                var statusClass = st.is_passed ? 'passed' : (st.is_current ? 'active' : '');
+
+                node.className = 'stop-node ' + statusClass;
+
+                let iconHtml = '';
+                if (st.is_current) {
+                    const iconName = data.service.Transport_Type === 'Bus' ? 'bus' : 'train';
+                    iconHtml = '<div class="live-status-icon"><i data-lucide="' + iconName + '" size="16"></i></div>';
+                }
+
+                node.innerHTML = '<div class="stop-marker"></div>' +
+                    iconHtml +
+                    '<div class="stop-info">' +
+                    '<div style="flex:1;">' +
+                    '<strong style="font-size: 1.1rem;">' + st.name + '</strong>' +
+                    '<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">' +
+                    '<span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">SCH ' + st.sched + '</span>' +
+                    '</div>' +
+                    '</div>' +
+                    '<div style="text-align:right">' +
+                    '<span class="badge" style="' + (st.is_current ? 'background: var(--accent); color: #000; border: none;' : '') + '">EST ' + st.est + '</span>' +
+                    '<div style="font-size:0.65rem; margin-top:6px; font-weight:800; color: ' + (st.is_current ? 'var(--accent)' : 'var(--text-dim)') + '; text-transform:uppercase;">' + st.status + '</div>' +
+                    '</div>' +
+                    '</div>';
+                tm.appendChild(node);
+            });
+
+            loader.style.display = 'none';
+            detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.lucide) window.lucide.createIcons();
+
+        } catch (e) {
+            console.error(e);
+            loader.style.display = 'none';
+            alert('AI Engine Sync Failed. Please retry.');
+        }
+    }
+</script>
+{% endblock %}

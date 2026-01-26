@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+    <h1>Precision AI Forecast</h1>
+    <p>Our XGBoost Machine Learning model analyzes real-time traffic, weather, and event data to predict precise delays
+        across Hyderabad.</p>
+</section>
+
+<!-- Manual Calibration Center -->
+<div class="glass-card">
+    <h3 style="margin-bottom: 2rem; display: flex; align-items: center; gap: 12px;">
+        <i data-lucide="settings-2" class="mode-highlighter"></i> Inference Configuration
+    </h3>
+    <form id="prediction-form" class="form-grid">
+        <div class="input-group">
+            <label class="input-label">Origin Location</label>
+            <input type="text" id="origin-input" class="input-field" placeholder="Secunderabad" required
+                autocomplete="off">
+            <div id="origin-suggestions" class="autocomplete-suggestions"></div>
+        </div>
+        <div class="input-group">
+            <label class="input-label">Final Destination</label>
+            <input type="text" id="dest-input" class="input-field" placeholder="Koti" required autocomplete="off">
+            <div id="dest-suggestions" class="autocomplete-suggestions"></div>
+        </div>
+        <div class="input-group">
+            <label class="input-label">Transport Configuration</label>
+            <select id="transport_type" class="input-field">
+                <option value="Bus">Bus (TSRTC)</option>
+                <option value="Metro">Hyderabad Metro</option>
+                <option value="Train">MMTS Train</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <label class="input-label">Schedule Date</label>
+            <input type="date" id="travel_date" class="input-field" value="2026-01-26" required>
+        </div>
+
+        <button type="button" id="predict-btn" class="btn-primary" style="grid-column: 1 / -1;">
+            Run ML Inference & Find Threads
+        </button>
+    </form>
+</div>
+
+<!-- Output Dashboard -->
+<div id="prediction-result" style="display: none; margin-top: 4rem;">
+    <div class="dashboard-layout">
+        <!-- AI Intelligence Panel -->
+        <div class="glass-card" style="position: relative;">
+            <div id="loading-overlay" class="loading-overlay" style="display: none;">
+                <div class="loader-content">
+                    <i data-lucide="cpu" class="pulse"></i>
+                    <span>NEURAL PATTERN ANALYSIS...</span>
+                </div>
+            </div>
+
+            <div class="dashboard-header">
+                <h2 style="font-size: 2.25rem;">Inference Results</h2>
+                <div id="res-route-label" style="color: var(--text-dim);">-- → --</div>
+            </div>
+
+            <div class="prediction-grid">
+                <div class="prediction-card">
+                    <div class="card-header">AI Predicted Delay</div>
+                    <div class="card-value" id="res-delay">--m</div>
+                    <div id="res-risk" class="risk-badge">--</div>
+                </div>
+                <div class="prediction-card">
+                    <div class="card-header">Optimal Alternative</div>
+                    <div class="card-value mode-highlighter" id="res-best-mode">--</div>
+                </div>
+
+                <!-- Telemetry Row -->
+                <div class="prediction-card" style="grid-column: 1 / -1; background: rgba(56, 189, 248, 0.05);">
+                    <div class="card-header">Real-time Telemetry Context</div>
+                    <div style="display: flex; gap: 20px; margin-top: 15px; flex-wrap: wrap;">
+                        <div class="tele-item">
+                            <small>HYD WEATHER</small>
+                            <span id="tele-weather" style="font-weight: 700; color: #fff;">--</span>
+                        </div>
+                        <div class="tele-item">
+                            <small>TRAFFIC PRESSURE</small>
+                            <span id="tele-traffic" style="font-weight: 700; color: #fff;">--</span>
+                        </div>
+                        <div class="tele-item">
+                            <small>PASSENGER LOAD</small>
+                            <span id="tele-load" style="font-weight: 700; color: #fff;">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="prediction-card reason-card" style="grid-column: 1 / -1;">
+                    <div class="card-header">Primary Data Stressor</div>
+                    <div class="card-value" id="res-reason" style="font-size: 1.25rem;">--</div>
+                </div>
+                <div class="prediction-card advisory-card" style="grid-column: 1 / -1;">
+                    <div class="card-header">Smart Advisory</div>
+                    <div class="advisory-text" id="res-rec">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Available Threads -->
+        <div id="results-panel">
+            <h3 style="margin-bottom: 2rem;">Matching Active Services</h3>
+            <div id="services-list" class="table-container">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const locations = ["Secunderabad", "Koti", "Mehdipatnam", "Charminar", "Ameerpet", "Hitech City", "Gachibowli", "Miyapur", "Uppal", "L.B. Nagar"];
+
+    function setupAuto(inputId, sugId) {
+        const i = document.getElementById(inputId);
+        const s = document.getElementById(sugId);
+        if (!i || !s) return;
+        i.addEventListener('input', function () {
+            const v = i.value.toLowerCase();
+            s.innerHTML = '';
+            if (v.length > 0) {
+                const f = locations.filter(l => l.toLowerCase().includes(v));
+                if (f.length > 0) {
+                    s.style.display = 'block';
+                    f.forEach(function (loc) {
+                        const d = document.createElement('div');
+                        d.className = 'suggestion-item';
+                        d.textContent = loc;
+                        d.onclick = function () { i.value = loc; s.style.display = 'none'; };
+                        s.appendChild(d);
+                    });
+                } else s.style.display = 'none';
+            } else s.style.display = 'none';
+        });
+    }
+
+    setupAuto('origin-input', 'origin-suggestions');
+    setupAuto('dest-input', 'dest-suggestions');
+
+    document.getElementById('predict-btn').addEventListener('click', async function () {
+        const overlay = document.getElementById('loading-overlay');
+        const resultDiv = document.getElementById('prediction-result');
+        const listDiv = document.getElementById('services-list');
+
+        const from = document.getElementById('origin-input').value;
+        const to = document.getElementById('dest-input').value;
+        const date = document.getElementById('travel_date').value;
+        const type = document.getElementById('transport_type').value;
+
+        if (!from || !to) { alert('Specify both locations for analysis.'); return; }
+
+        resultDiv.style.display = 'block';
+        overlay.style.display = 'flex';
+        listDiv.innerHTML = '<p style="padding: 30px; color: var(--text-dim); text-align: center;">Scanning Neural Pathways...</p>';
+
+        try {
+            const response = await fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ from, to, date, type })
+            });
+            const data = await response.json();
+
+
+
+            if (data.representative_insight) {
+                const ins = data.representative_insight;
+                document.getElementById('res-route-label').textContent = from + ' \u2192 ' + to;
+                document.getElementById('res-delay').textContent = ins.predicted_delay + 'm';
+                document.getElementById('res-best-mode').textContent = ins.best_mode;
+                document.getElementById('res-reason').textContent = ins.reason;
+                document.getElementById('res-rec').textContent = ins.recommendation;
+
+                // Populate Telemetry
+                document.getElementById('tele-weather').textContent = ins.weather.description + ' (' + ins.weather.temp + '°C)';
+                document.getElementById('tele-traffic').textContent = ins.traffic;
+                document.getElementById('tele-load').textContent = ins.load + '%';
+
+                const rb = document.getElementById('res-risk');
+                rb.textContent = ins.risk_level + ' Risk';
+                rb.className = 'risk-badge risk-' + ins.risk_level.toLowerCase();
+            }
+
+            if (data.schedules) {
+                let html = '<table><thead><tr><th>Thread ID</th><th>Sch. Dep</th><th>Predicted Arr</th><th>Status</th><th>Tracking</th></tr></thead><tbody>';
+                data.schedules.forEach(function (s) {
+                    const p = s.prediction;
+                    const liveDot = p.is_live ? '<span class="live-dot"></span>' : '';
+
+                    html += '<tr class="service-row">' +
+                        '<td><strong style="color:var(--accent)">' + s.Service_ID + '</strong></td>' +
+                        '<td>' + s.Scheduled_Departure + '</td>' +
+                        '<td>' + p.predicted_arrival + '</td>' +
+                        '<td><span class="risk-badge risk-' + p.risk_level.toLowerCase() + '">' + p.status_text + liveDot + '</span></td>' +
+                        '<td><a href="/track/' + s.id + '?date=' + date + '" class="btn-primary" style="padding: 6px 12px; font-size: 0.7rem; text-decoration: none; display: inline-block;">Track</a></td>' +
+                        '</tr>';
+                });
+                html += '</tbody></table>';
+                listDiv.innerHTML = html;
+            } else {
+                listDiv.innerHTML = '<p style="padding: 30px; color: var(--danger); text-align: center;">No matching threads found.</p>';
+            }
+
+            overlay.style.display = 'none';
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
+            if (window.lucide) window.lucide.createIcons();
+
+        } catch (error) {
+            console.error(error);
+            overlay.style.display = 'none';
+            alert('Cloud sync failed.');
+        }
+    });
+</script>
+{% endblock %}

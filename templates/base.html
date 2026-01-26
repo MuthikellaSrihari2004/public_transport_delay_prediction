@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyderTrax | Hyderabad Transit AI Dashboard</title>
+
+    <!-- Premium Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Elite Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+    <header>
+        <div class="container" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <a href="/" class="nav-brand">
+                <div class="brand-icon">
+                    <i data-lucide="zap" fill="#000" color="#000" size="24"></i>
+                </div>
+                <span class="brand-text">HyderTrax</span>
+            </a>
+
+            <nav class="main-nav">
+                <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">Dashboard</a>
+                <a href="/predict" class="nav-link {% if request.path == '/predict' %}active{% endif %}">AI
+                    Predictor</a>
+                <a href="/map" class="nav-link {% if request.path == '/map' %}active{% endif %}">Live Map</a>
+                <a href="/analytics"
+                    class="nav-link {% if request.path == '/analytics' %}active{% endif %}">Analytics</a>
+            </nav>
+
+
+            <div class="auth-group" style="display: flex; gap: 15px; align-items: center;">
+                <div style="text-align: right;" class="desktop-only">
+                    <div
+                        style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">
+                        Service Status</div>
+                    <div
+                        style="font-size: 0.85rem; color: var(--success); font-weight: 800; display: flex; align-items: center; gap: 6px; justify-content: flex-end;">
+                        <span style="width: 8px; height: 8px; background: var(--success); border-radius: 50%;"></span>
+                        All Systems Online
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer style="margin-top: 10rem; border-top: 1px solid var(--glass-border); padding: 4rem 0;">
+        <div class="container">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 3rem;">
+                <div>
+                    <div class="nav-brand" style="margin-bottom: 1.5rem;">
+                        <span class="brand-text" style="font-size: 1.25rem;">HyderTrax AI</span>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">
+                        The next generation of urban mobility intelligence for Hyderabad. Optimized by XGBoost Machine
+                        Learning and Real-time Spatio-temporal analysis.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 1.5rem; font-size: 0.9rem;">Quick Access</h4>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <a href="/" style="color: var(--text-dim); text-decoration: none; font-size: 0.85rem;">Public
+                            Dashboard</a>
+                        <a href="/predict"
+                            style="color: var(--text-dim); text-decoration: none; font-size: 0.85rem;">Precision
+                            Predictor</a>
+                        <a href="#" style="color: var(--text-dim); text-decoration: none; font-size: 0.85rem;">API
+                            Documentation</a>
+                    </div>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 1.5rem; font-size: 0.9rem;">Service Partners</h4>
+                    <div style="display: flex; gap: 20px; opacity: 0.6;">
+                        <i data-lucide="bus"></i>
+                        <i data-lucide="train-front"></i>
+                        <i data-lucide="train"></i>
+                        <i data-lucide="map"></i>
+                    </div>
+                </div>
+            </div>
+            <div
+                style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                <div style="color: var(--text-muted); font-size: 0.8rem;">
+                    &copy; 2026 HyderTrax Analytics. Designed for Hyderabad.
+                </div>
+                <div style="display: flex; gap: 2rem;">
+                    <a href="#" style="color: var(--text-muted); text-decoration: none; font-size: 0.8rem;">Privacy
+                        Policy</a>
+                    <a href="#" style="color: var(--text-muted); text-decoration: none; font-size: 0.8rem;">Terms of
+                        Service</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <style>
+        .desktop-only {
+            @media (max-width: 600px) {
+                display: none;
+            }
+        }
+    </style>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

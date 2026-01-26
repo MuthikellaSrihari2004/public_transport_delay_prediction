@@ -1,0 +1,16 @@
+pandas
+numpy
+matplotlib
+seaborn
+scikit-learn
+flask
+flask-sqlalchemy
+python-dotenv
+jupyter
+ipykernel
+scipy
+xgboost
+lightgbm
+statsmodels
+requests
+joblib

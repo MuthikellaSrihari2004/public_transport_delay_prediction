@@ -1,0 +1,420 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+    <h1>Autonomous Live Tracker</h1>
+    <p>Monitoring spatio-temporal telemetry for service <strong>{{ info.Service_ID }}</strong>. AI-synced with Hyderabad
+        Transit Control.</p>
+</section>
+
+<div class="dashboard-layout">
+    <!-- Left: Data Intelligence Hub -->
+    <div class="main-stats">
+        <div class="glass-card" style="border-left: 6px solid var(--accent); position: relative; overflow: hidden;">
+            <div class="live-signal">SIGNAL: ACTIVE</div>
+
+            <div class="dashboard-header"
+                style="display: flex; justify-content: space-between; align-items: start; margin-top: 1rem;">
+                <div>
+                    <h2 style="font-size: 3rem; font-weight: 900; letter-spacing: -2px; line-height: 1;">{{
+                        info.Service_ID }}</h2>
+                    <div
+                        style="color: var(--text-dim); margin-top: 10px; display: flex; align-items: center; gap: 10px; font-weight: 700;">
+                        <i data-lucide="map-pin" size="18" style="color: var(--accent);"></i>
+                        {{ info.From_Location }} <i data-lucide="arrow-right" size="14"></i> {{ info.To_Location }}
+                    </div>
+                </div>
+                <div class="mode-badge {{ info.Transport_Type|lower }}">
+                    <i data-lucide="{% if info.Transport_Type == 'Bus' %}bus{% else %}train{% endif %}" size="16"></i>
+                    {{ info.Transport_Type|upper }}
+                </div>
+            </div>
+
+            <!-- Prediction Insights -->
+            <div class="prediction-grid" style="margin-top: 3rem;">
+                <div class="prediction-card highlight">
+                    <div class="card-header">AI Predicted Delay</div>
+                    <div class="card-value" style="color: var(--accent);">+{{ insights.predicted_delay }}m</div>
+                    <div class="risk-badge risk-{{ insights.risk_level|lower }}">{{ insights.risk_level }} Risk Impact
+                    </div>
+                </div>
+
+                <div class="prediction-card">
+                    <div class="card-header">Target Arrival</div>
+                    <div class="card-value">{{ info.Reach_Time }}</div>
+                    <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 8px; font-weight: 800;">
+                        REVISED FROM {{ info.Scheduled_Departure }}
+                    </div>
+                </div>
+
+                <div class="prediction-card reason-box" style="grid-column: 1 / -1;">
+                    <div class="card-header">Primary Data Stressor</div>
+                    <div style="display: flex; align-items: center; gap: 15px; margin-top: 10px;">
+                        <div class="reason-icon"><i data-lucide="zap"></i></div>
+                        <div class="card-value" style="font-size: 1.25rem;">{{ insights.reason }}</div>
+                    </div>
+                </div>
+
+                <div class="prediction-card advisory-card" style="grid-column: 1 / -1;">
+                    <div class="card-header">ML Recommendation</div>
+                    <div class="advisory-text">{{ insights.recommendation }}</div>
+                </div>
+            </div>
+
+            <!-- Real-time Telemetry -->
+            <div class="telemetry-bar">
+                <div class="tele-item">
+                    <small>WEATHER</small>
+                    <strong>{{ insights.weather.description }}</strong>
+                </div>
+                <div class="tele-item">
+                    <small>TRAFFIC</small>
+                    <strong
+                        class="{% if insights.traffic == 'High' or insights.traffic == 'Very High' %}text-danger{% endif %}">{{
+                        insights.traffic }}</strong>
+                </div>
+                <div class="tele-item">
+                    <small>LOAD</small>
+                    <strong>{{ insights.load }}%</strong>
+                </div>
+                <div class="tele-item">
+                    <small>TEMP</small>
+                    <strong>{{ insights.weather.temp }}°C</strong>
+                </div>
+            </div>
+
+            <div style="margin-top: 2.5rem; display: flex; gap: 1rem;">
+                <a href="/" class="btn-primary" style="flex: 2; text-decoration: none;">New Route Search</a>
+                <button onclick="window.location.reload()" class="btn-outline" style="flex: 1;">
+                    <i data-lucide="refresh-cw" size="16"></i> Sync
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Journey Progress -->
+    <div id="results-panel">
+        <div class="glass-card" style="padding: 2.5rem; height: 100%; position: relative;">
+            <div class="timeline-header">
+                <h3>Journey Tracker</h3>
+                <div class="live-clock-box">
+                    <small>LIVE SYSTEM TIME</small>
+                    <div id="live-clock">{{ now_time }}</div>
+                </div>
+            </div>
+
+            <div class="timeline-elite enhanced">
+                {% for stop in stops %}
+                <div
+                    class="stop-node {% if stop.is_passed %}passed{% endif %} {% if stop.is_current %}active{% endif %}">
+                    <div class="stop-line"></div>
+                    <div class="stop-marker">
+                        {% if stop.is_current %}
+                        <div class="marker-ping"></div>
+                        {% endif %}
+                    </div>
+                    <div class="stop-info-card">
+                        <div class="stop-main">
+                            <span class="stop-name">{{ stop.name }}</span>
+                            <span class="stop-status-tag">{{ stop.status }}</span>
+                        </div>
+                        <div class="stop-times">
+                            <div class="time-group">
+                                <label>SCHEDULED</label>
+                                <span>{{ stop.sched }}</span>
+                            </div>
+                            <div class="time-group highlight">
+                                <label>ESTIMATED</label>
+                                <span>{{ stop.est }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .live-signal {
+        position: absolute;
+        top: 0;
+        right: 0;
+        background: var(--success);
+        color: #000;
+        font-size: 0.6rem;
+        font-weight: 900;
+        padding: 5px 15px;
+        border-bottom-left-radius: 12px;
+        letter-spacing: 1px;
+        animation: blink 2s infinite;
+    }
+
+    @keyframes blink {
+
+        0%,
+        100% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.5;
+        }
+    }
+
+    .mode-badge {
+        padding: 8px 16px;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--glass-border);
+    }
+
+    .mode-badge.bus {
+        color: var(--accent);
+        border-color: var(--accent-glow);
+    }
+
+    .mode-badge.metro {
+        color: var(--accent-secondary);
+        border-color: rgba(129, 140, 248, 0.3);
+    }
+
+    .prediction-card.highlight {
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), transparent);
+        border-color: var(--accent-glow);
+    }
+
+    .reason-box .reason-icon {
+        width: 40px;
+        height: 40px;
+        background: var(--accent);
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: #000;
+        box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .telemetry-bar {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-top: 2rem;
+        background: rgba(0, 0, 0, 0.2);
+        padding: 15px;
+        border-radius: 16px;
+        border: 1px solid var(--glass-border);
+    }
+
+    .tele-item small {
+        display: block;
+        font-size: 0.55rem;
+        color: var(--text-muted);
+        font-weight: 800;
+        margin-bottom: 2px;
+    }
+
+    .tele-item strong {
+        font-size: 0.9rem;
+        color: #fff;
+    }
+
+    .btn-outline {
+        background: transparent;
+        border: 1px solid var(--glass-border);
+        color: #fff;
+        font-weight: 700;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+
+    .btn-outline:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: #fff;
+    }
+
+    /* Enhanced Timeline */
+    .timeline-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 3rem;
+        border-bottom: 1px solid var(--glass-border);
+        padding-bottom: 1.5rem;
+    }
+
+    .live-clock-box {
+        text-align: right;
+    }
+
+    .live-clock-box small {
+        font-size: 0.6rem;
+        color: var(--text-muted);
+        font-weight: 800;
+        display: block;
+    }
+
+    #live-clock {
+        font-family: monospace;
+        font-size: 1.4rem;
+        font-weight: 900;
+        color: var(--accent);
+    }
+
+    .timeline-elite.enhanced {
+        padding-left: 0;
+    }
+
+    .stop-node {
+        position: relative;
+        padding-left: 40px;
+        margin-bottom: 1.5rem;
+    }
+
+    .stop-line {
+        position: absolute;
+        left: 19px;
+        top: 25px;
+        bottom: -20px;
+        width: 2px;
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .stop-node:last-child .stop-line {
+        display: none;
+    }
+
+    .stop-marker {
+        position: absolute;
+        left: 13px;
+        top: 5px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #1e293b;
+        border: 3px solid #475569;
+        z-index: 5;
+    }
+
+    .stop-node.passed .stop-marker {
+        background: var(--success);
+        border-color: var(--success);
+    }
+
+    .stop-node.passed .stop-line {
+        background: var(--success);
+    }
+
+    .stop-node.active .stop-marker {
+        background: var(--accent);
+        border-color: #fff;
+        transform: scale(1.3);
+    }
+
+    .marker-ping {
+        position: absolute;
+        inset: -10px;
+        border-radius: 50%;
+        background: var(--accent);
+        opacity: 0.5;
+        animation: ping 1.5s infinite;
+    }
+
+    @keyframes ping {
+        0% {
+            transform: scale(1);
+            opacity: 0.5;
+        }
+
+        100% {
+            transform: scale(3);
+            opacity: 0;
+        }
+    }
+
+    .stop-info-card {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--glass-border);
+        padding: 15px 20px;
+        border-radius: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: 0.3s;
+    }
+
+    .stop-node.active .stop-info-card {
+        background: rgba(56, 189, 248, 0.05);
+        border-color: var(--accent-glow);
+    }
+
+    .stop-main {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .stop-name {
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: #fff;
+    }
+
+    .stop-status-tag {
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-top: 2px;
+    }
+
+    .stop-node.active .stop-status-tag {
+        color: var(--accent);
+    }
+
+    .stop-times {
+        display: flex;
+        gap: 20px;
+    }
+
+    .time-group {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+
+    .time-group label {
+        font-size: 0.55rem;
+        color: var(--text-muted);
+        font-weight: 800;
+    }
+
+    .time-group span {
+        font-size: 0.85rem;
+        font-family: monospace;
+        font-weight: 700;
+    }
+
+    .time-group.highlight span {
+        color: var(--accent);
+        font-weight: 900;
+    }
+</style>
+
+<script>
+    if (window.lucide) lucide.createIcons();
+    function updateClock() {
+        const now = new Date();
+        const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0');
+        const clockEl = document.getElementById('live-clock');
+        if (clockEl) clockEl.textContent = timeStr;
+    }
+    setInterval(updateClock, 1000);
+</script>
+{% endblock %}
