@@ -238,13 +238,11 @@ header {
 .sensor-bar {
     display: flex;
     gap: 1rem;
-    overflow-x: auto;
-    padding-bottom: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding-bottom: 0;
     margin-bottom: 2.5rem;
-    -ms-overflow-style: none;
-    /* IE/Edge */
-    scrollbar-width: none;
-    /* Firefox */
 }
 
 .sensor-bar::-webkit-scrollbar {
