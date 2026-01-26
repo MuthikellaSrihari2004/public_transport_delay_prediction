@@ -52,9 +52,9 @@ data/external/*
 !data/external/.gitkeep
 
 # Database
-*.db
-*.sqlite
-*.sqlite3
+# *.db  <-- Un-commented to allow upload for deployment
+# *.sqlite
+# *.sqlite3
 
 # Models (optional - comment out if you want to version control models)
 models/*.pkl
