@@ -113,8 +113,15 @@ def search():
     }
 
 
+    # Detect if fallback occurred (mixed modes)
+    if not schedules_df.empty:
+        unique_modes = schedules_df['Transport_Type'].unique()
+        if t_type not in unique_modes and len(unique_modes) > 0:
+            flash(f"Requested mode '{t_type}' unavailable. Showing available alternatives.", "warning")
+            # t_type = "Any"  # Keep user selection for UI consistency
+
     if schedules_df.empty:
-        return render_template('index.html', error=f"No services found.", live_env=live_env, travel_date=date_str)
+        return render_template('index.html', error=f"No services found for this specific route on {date_str}. Try popular routes like Secunderabad to Miyapur.", live_env=live_env, travel_date=date_str)
 
     # 2. Process Batch using Engine (Enforces Distribution)
     schedules_raw = schedules_df.to_dict('records')
@@ -200,6 +207,8 @@ def _get_tracking_data(service_id, travel_date):
         chk_dt = now.date()
         
     is_today = (chk_dt == now.date())
+    is_past = (chk_dt < now.date())
+    is_future = (chk_dt > now.date())
     found_current = False
     
     for i, s_name in enumerate(raw_stops):
@@ -212,7 +221,16 @@ def _get_tracking_data(service_id, travel_date):
         is_passed = False
         is_current = False
         
-        if is_today:
+        if is_past:
+             status = "Departed"
+             is_passed = True
+             if i == len(raw_stops) - 1:
+                 status = "Reached"
+        elif is_future:
+             status = "Upcoming"
+             is_passed = False
+        elif is_today:
+             # Existing live logic
             if now > est_time + timedelta(minutes=2):
                 status = "Departed"
                 is_passed = True

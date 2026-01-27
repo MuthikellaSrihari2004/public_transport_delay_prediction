@@ -84,6 +84,7 @@ class TransportDB:
         # This allows the app to predict for "future" dates by reusing existing patterns
         if df.empty:
             cursor = conn.cursor()
+            # 2a. Fallback: Same mode, template date
             check_q = "SELECT DISTINCT date FROM schedules WHERE from_location = ? AND to_location = ? AND transport_type = ? ORDER BY date DESC LIMIT 1"
             cursor.execute(check_q, (from_loc, to_loc, transport_type))
             row = cursor.fetchone()
@@ -91,6 +92,28 @@ class TransportDB:
             if row:
                 template_date = row[0]
                 df = pd.read_sql_query(query, conn, params=(from_loc, to_loc, transport_type, template_date))
+                
+            # 2b. Fallback: ANY mode if specific mode failed
+            if df.empty:
+                # print(f"⚠️ No {transport_type} found. Searching for alternatives...")
+                alt_query = """
+                SELECT * FROM schedules 
+                WHERE from_location = ? 
+                AND to_location = ? 
+                -- Ignore transport_type restriction
+                AND date = ?
+                ORDER BY scheduled_departure ASC
+                """
+                df = pd.read_sql_query(alt_query, conn, params=(from_loc, to_loc, date))
+                
+                # 2c. Fallback: ANY mode, template date
+                if df.empty:
+                    check_q_alt = "SELECT DISTINCT date FROM schedules WHERE from_location = ? AND to_location = ? ORDER BY date DESC LIMIT 1"
+                    cursor.execute(check_q_alt, (from_loc, to_loc))
+                    row_alt = cursor.fetchone()
+                    if row_alt:
+                        template_alt = row_alt[0]
+                        df = pd.read_sql_query(alt_query, conn, params=(from_loc, to_loc, template_alt))
         
         conn.close()
         return df

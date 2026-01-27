@@ -136,7 +136,17 @@ def run_interactive():
         stop_str = stop_time.strftime('%H:%M')
         
         status = "○ UPCOMING"
-        if is_today:
+        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        is_past = target_date < now.date()
+        is_future = target_date > now.date()  
+          
+        if is_past:
+             status = "✓ DEPARTED"
+             if i == len(stops_raw) - 1:
+                 status = "🏁 REACHED"
+        elif is_future:
+             status = "○ UPCOMING"
+        elif is_today:
             if now > stop_time + timedelta(minutes=2):
                 status = "✓ PASSED"
             elif now >= stop_time - timedelta(minutes=2):
