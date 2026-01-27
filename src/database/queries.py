@@ -66,7 +66,10 @@ class TransportDB:
 
 
     def get_schedules_by_route(self, from_loc, to_loc, transport_type, date):
-        """Fetch schedules matching criteria"""
+        """Fetch schedules matching criteria with fallback to template dates"""
+        conn = self.get_conn()
+        
+        # 1. Try exact date match first
         query = """
         SELECT * FROM schedules 
         WHERE from_location = ? 
@@ -75,8 +78,20 @@ class TransportDB:
         AND date = ?
         ORDER BY scheduled_departure ASC
         """
-        conn = self.get_conn()
         df = pd.read_sql_query(query, conn, params=(from_loc, to_loc, transport_type, date))
+        
+        # 2. Fallback: If no specific schedule, use the most recent available schedule as a template
+        # This allows the app to predict for "future" dates by reusing existing patterns
+        if df.empty:
+            cursor = conn.cursor()
+            check_q = "SELECT DISTINCT date FROM schedules WHERE from_location = ? AND to_location = ? AND transport_type = ? ORDER BY date DESC LIMIT 1"
+            cursor.execute(check_q, (from_loc, to_loc, transport_type))
+            row = cursor.fetchone()
+            
+            if row:
+                template_date = row[0]
+                df = pd.read_sql_query(query, conn, params=(from_loc, to_loc, transport_type, template_date))
+        
         conn.close()
         return df
 

@@ -61,20 +61,22 @@ def index():
         "is_holiday": bool(holiday_name),
         "event_flag": event_flag
     }
-    return render_template('index.html', live_env=live_env)
+    return render_template('index.html', live_env=live_env, today_date=date_str)
 
 
 # Route: Manual Prediction Page
 @app.route('/predict')
 def prediction_page():
-    return render_template('prediction.html')
+    return render_template('prediction.html', today_date=datetime.now().strftime("%Y-%m-%d"))
 
 # API: Search (Used by Prediction Page) & Form Post
 @app.route('/search', methods=['POST'])
 def search():
     from_loc = request.form.get('from_location', '').strip().title()
     to_loc = request.form.get('to_location', '').strip().title()
-    date_str = request.form.get('travel_date', '2026-01-26')
+    date_str = request.form.get('travel_date', '')
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d")
     t_type = request.form.get('transport_type', 'Bus')
     
     # Name Mapping
@@ -83,12 +85,8 @@ def search():
     to_loc = mapping.get(to_loc, to_loc)
 
     # Date Logic
-    try:
-        search_date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-        ref_day = 6 + search_date_obj.weekday()
-        mapped_date = f"2025-01-{ref_day:02d}"
-    except:
-        mapped_date = "2025-01-06"
+    # Pass requested date directly; DB now handles fallback to templates
+    mapped_date = date_str
 
     # 1. Get Schedules
     schedules_df = DB.get_schedules_by_route(from_loc, to_loc, t_type, mapped_date)
@@ -116,7 +114,7 @@ def search():
 
 
     if schedules_df.empty:
-        return render_template('index.html', error=f"No services found.", live_env=live_env)
+        return render_template('index.html', error=f"No services found.", live_env=live_env, travel_date=date_str)
 
     # 2. Process Batch using Engine (Enforces Distribution)
     schedules_raw = schedules_df.to_dict('records')
@@ -136,19 +134,16 @@ def api_search():
     data = request.json
     from_loc = data.get('from', '').strip().title()
     to_loc = data.get('to', '').strip().title()
-    date_str = data.get('date', '2026-01-26')
+    date_str = data.get('date', '')
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d")
     t_type = data.get('type', 'Bus')
     
     mapping = {"Lb Nagar": "L.B. Nagar", "Hi-Tech City": "Hitech City"}
     from_loc = mapping.get(from_loc, from_loc)
     to_loc = mapping.get(to_loc, to_loc)
 
-    try:
-        search_date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-        ref_day = 6 + search_date_obj.weekday()
-        mapped_date = f"2025-01-{ref_day:02d}"
-    except:
-        mapped_date = "2025-01-06"
+    mapped_date = date_str
 
     schedules_df = DB.get_schedules_by_route(from_loc, to_loc, t_type, mapped_date)
     
@@ -258,7 +253,9 @@ def _get_tracking_data(service_id, travel_date):
 
 @app.route('/track/<int:service_id>')
 def track(service_id):
-    travel_date = request.args.get('date', '2026-01-26')
+    travel_date = request.args.get('date', '')
+    if not travel_date:
+        travel_date = datetime.now().strftime("%Y-%m-%d")
     data = _get_tracking_data(service_id, travel_date)
     if not data:
         return redirect(url_for('index'))
@@ -266,7 +263,9 @@ def track(service_id):
 
 @app.route('/api/track/<int:service_id>')
 def api_track(service_id):
-    travel_date = request.args.get('date', '2026-01-26')
+    travel_date = request.args.get('date', '')
+    if not travel_date:
+        travel_date = datetime.now().strftime("%Y-%m-%d")
     data = _get_tracking_data(service_id, travel_date)
     if not data:
         return {"error": "Not Found"}, 404

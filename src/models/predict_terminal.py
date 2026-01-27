@@ -28,10 +28,16 @@ def run_interactive():
         dest = input("📍 To   (e.g. Miyapur):      ").strip().title()
         
         date_input = input("📅 Date (YYYY-MM-DD) [Enter for Today]: ").strip()
-        if not date_input:
+        try:
+            if date_input:
+                datetime.strptime(date_input, '%Y-%m-%d') # Validate format
+                date_str = date_input
+            else:
+                raise ValueError("Empty input")
+        except ValueError:
             date_str = datetime.now().strftime("%Y-%m-%d")
-        else:
-            date_str = date_input
+            if date_input:
+                print(f"⚠️ Invalid format '{date_input}'. Using today: {date_str}")
             
         t_mode = input("🚌 Mode (Bus/Metro/Train) [Bus]: ").strip()
         t_type = "Bus" if not t_mode else t_mode.title()
@@ -42,12 +48,8 @@ def run_interactive():
     print(f"\n🔎 Scanning neural pathways for {date_str}...", flush=True)
     
     # Date Logic
-    try:
-        search_date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-        ref_day = 6 + search_date_obj.weekday()
-        mapped_date = f"2025-01-{ref_day:02d}"
-    except Exception as e:
-        mapped_date = "2025-01-06"
+    # Pass requested date directly
+    mapped_date = date_str
 
     print(f"📡 Status: Fetching scheduling threads from vault...", flush=True)
 
