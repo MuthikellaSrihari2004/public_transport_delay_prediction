@@ -169,7 +169,14 @@
             if (data.representative_insight) {
                 const ins = data.representative_insight;
                 document.getElementById('res-route-label').textContent = from + ' \u2192 ' + to;
-                document.getElementById('res-delay').textContent = ins.predicted_delay + 'm';
+
+                const delayEl = document.getElementById('res-delay');
+                delayEl.textContent = ins.predicted_delay + 'm';
+
+                if (ins.risk_level === 'High') delayEl.style.color = 'var(--danger)';
+                else if (ins.risk_level === 'Medium') delayEl.style.color = 'var(--warning)';
+                else delayEl.style.color = 'var(--success)';
+
                 document.getElementById('res-best-mode').textContent = ins.best_mode;
                 document.getElementById('res-reason').textContent = ins.reason;
                 document.getElementById('res-rec').textContent = ins.recommendation;
@@ -180,7 +187,7 @@
                 document.getElementById('tele-load').textContent = ins.load + '%';
 
                 const rb = document.getElementById('res-risk');
-                rb.textContent = ins.risk_level + ' Risk';
+                rb.textContent = ins.status_text;
                 rb.className = 'risk-badge risk-' + ins.risk_level.toLowerCase();
             }
 

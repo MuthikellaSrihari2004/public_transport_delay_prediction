@@ -52,14 +52,16 @@ data/external/*
 !data/external/.gitkeep
 
 # Database
-# *.db  <-- Un-commented to allow upload for deployment
-# *.sqlite
-# *.sqlite3
+# *.db (Allow transport.db for functional deployment)
+!data/transport.db
+*.sqlite
+*.sqlite3
 
-# Models (optional - comment out if you want to version control models)
-models/*.pkl
-models/*.joblib
-models/*.h5
+# Models
+# models/*.pkl (Allow models for functional prediction)
+!models/*.pkl
+!models/*.joblib
+*.h5
 
 # Logs
 logs/

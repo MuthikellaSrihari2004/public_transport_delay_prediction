@@ -7,42 +7,44 @@
     <p>AI-Predicted travel intelligence for Hyderabad. Accurate, realistic, and data-driven.</p>
 </section>
 
-<!-- Live Network Sensors -->
+<!-- Atmospheric Intelligence Dashboard -->
 {% if live_env %}
-<div class="sensor-bar">
-    <div class="sensor-chip active">
-        <i data-lucide="thermometer" size="18"></i>
-        <span>{{ live_env.weather.temp }}°C</span>
+<div class="weather-intelligence-card fade-in">
+    <div class="weather-content">
+        <div class="weather-main">
+            <div class="weather-icon-wrapper">
+                {% if live_env.weather.is_rainy %}
+                <i data-lucide="cloud-rain" class="weather-icon rain-pulse"></i>
+                {% elif live_env.weather.temp > 35 %}
+                <i data-lucide="sun" class="weather-icon sun-glow"></i>
+                {% else %}
+                <i data-lucide="cloud" class="weather-icon float-anim"></i>
+                {% endif %}
+            </div>
+            <div class="weather-text">
+                <div class="weather-status">{{ live_env.weather.description }}</div>
+                <div class="weather-location">Hyderabad, IN • Live Tracking</div>
+            </div>
+        </div>
+        <div class="weather-metrics">
+            <div class="metric-item">
+                <span class="metric-label">Temperature</span>
+                <span class="metric-value">{{ live_env.weather.temp }}°C</span>
+            </div>
+            <div class="metric-item divider"></div>
+            <div class="metric-item">
+                <span class="metric-label">Humidity</span>
+                <span class="metric-value">{{ live_env.weather.humidity }}%</span>
+            </div>
+            <div class="metric-item divider"></div>
+            <div class="metric-item">
+                <span class="metric-label">System Mode</span>
+                <span class="metric-value status-online">AI Optimized</span>
+            </div>
+        </div>
     </div>
-    <div class="sensor-chip">
-        <i data-lucide="cloud" size="18"></i>
-        <span>{{ live_env.weather.description }}</span>
-    </div>
-    <div
-        class="sensor-chip {% if live_env.traffic == 'High' or live_env.traffic == 'Very High' %}active-danger{% endif %}">
-        <i data-lucide="activity" size="18"></i>
-        <span>Traffic: {{ live_env.traffic }}</span>
-    </div>
-    <div class="sensor-chip">
-        <i data-lucide="calendar" size="18"></i>
-        <span>{{ live_env.ctx.day_type }}</span>
-    </div>
-    {% if live_env.is_holiday %}
-    <div class="sensor-chip active chip-holiday">
-        <i data-lucide="party-popper" size="18"></i>
-        <span>{{ live_env.holiday_name }}</span>
-    </div>
-    {% endif %}
-
-    {% if live_env.event_flag %}
-    <div class="sensor-chip active chip-event">
-        <i data-lucide="alert-triangle" size="18"></i>
-        <span>Local Event Active</span>
-    </div>
-    {% endif %}
 </div>
 {% endif %}
-
 
 <!-- Search Engine -->
 <div class="glass-card">
@@ -98,30 +100,38 @@
                         <th>ID</th>
                         <th>Start</th>
                         <th>Reach</th>
-                        <th>Status</th>
+
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for s in schedules %}
                     <tr class="service-row" data-id="{{ s.id }}">
-                        <td>{{ s.Transport_Type }}</td>
-                        <td style="font-family: monospace; font-weight: 700;">{{ s.Service_ID }}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                {% if s.Transport_Type == 'Bus' %}
+                                <i data-lucide="bus" size="16" style="color: var(--accent);"></i>
+                                {% elif s.Transport_Type == 'Metro' %}
+                                <i data-lucide="train" size="16" style="color: var(--accent-secondary);"></i>
+                                {% elif s.Transport_Type == 'Train' %}
+                                <i data-lucide="train-front" size="16" style="color: var(--warning);"></i>
+                                {% endif %}
+                                <span style="font-weight: 600;">{{ s.Transport_Type }}</span>
+                            </div>
+                        </td>
+                        <td style="font-family: monospace; font-weight: 700; opacity: 0.8;">{{ s.Service_ID }}</td>
                         <td>{{ s.Scheduled_Departure }}</td>
                         <td style="font-weight: 800; color: #fff;">
-                            {{ s.prediction.predicted_arrival }}
+                            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700;">SCH {{
+                                s.prediction.scheduled_arrival }}</div>
+                            <div style="color: var(--accent); white-space: nowrap;">EST {{
+                                s.prediction.predicted_arrival }}</div>
                         </td>
+
                         <td>
-                            <span class="risk-badge risk-{{ s.prediction.risk_level|lower }}">
-                                {{ s.prediction.status_text }}
-                                {% if s.prediction.is_live %}
-                                <span class="live-dot"></span>
-                                {% endif %}
-                            </span>
-                        </td>
-                        <td>
-                            <button class="btn-primary btn-small" onclick="viewPrediction('{{ s.id }}')">
-                                View
+                            <button class="btn-primary btn-small" onclick="viewPrediction('{{ s.id }}')"
+                                style="display: flex; align-items: center; gap: 6px;">
+                                <span>Track</span> <i data-lucide="arrow-right" size="14"></i>
                             </button>
                         </td>
                     </tr>
@@ -629,7 +639,14 @@
 
             document.getElementById('detail-route-label').textContent = data.service.From_Location + ' \u2192 ' + data.service.To_Location;
 
-            document.getElementById('res-delay').textContent = '+' + data.insights.predicted_delay + 'm';
+            const delayEl = document.getElementById('res-delay');
+            delayEl.textContent = '+' + data.insights.predicted_delay + 'm';
+
+            // Dynamic Color for Delay Value
+            if (data.insights.risk_level === 'High') delayEl.style.color = 'var(--danger)';
+            else if (data.insights.risk_level === 'Medium') delayEl.style.color = 'var(--warning)';
+            else delayEl.style.color = 'var(--success)';
+
             document.getElementById('res-best-mode').textContent = data.insights.best_mode;
             document.getElementById('res-reason').textContent = data.insights.reason;
             document.getElementById('res-rec').textContent = data.insights.recommendation;
@@ -640,7 +657,7 @@
             document.getElementById('tele-load').textContent = data.insights.load + '%';
 
             const risk = document.getElementById('res-risk');
-            risk.textContent = data.insights.risk_level + ' Risk';
+            risk.textContent = data.insights.status_text;
             risk.className = 'risk-badge risk-' + data.insights.risk_level.toLowerCase();
 
             const tm = document.getElementById('res-timeline');

@@ -31,7 +31,16 @@ def evaluate_model(data_path=None, model_path=None, encoder_path=None):
 
     # Load artifacts
     try:
+        # Optimization: Read only a sample/tail if file is huge, or read all then sample
+        # Reading full CSV is slow, but random sampling requires reading. 
+        # For speed, we'll read, but process only a sample.
         df = pd.read_csv(d_path)
+        
+        # SPEED OPTIMIZATION: Sample 100k rows if dataset > 500k
+        if len(df) > 500000:
+            print(f"⚠️ Dataset too large ({len(df)} rows). Sampling 100k rows for fast evaluation...")
+            df = df.sample(n=100000, random_state=42)
+            
         model = joblib.load(m_path)
         encoders = joblib.load(e_path)
     except Exception as e:

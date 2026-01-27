@@ -54,6 +54,60 @@
         </div>
     </header>
 
+    <!-- Global Real-time Intelligence Bar -->
+    {% if live_env %}
+    <div class="container" style="margin-bottom: -1rem;">
+        <div class="sensor-bar">
+            <!-- Weather Chip -->
+            <div class="sensor-chip active">
+                <i data-lucide="thermometer" size="18"></i>
+                <span>{{ live_env.weather.temp }}°C</span>
+                <span style="opacity: 0.5; font-size: 0.6rem; margin-left: 4px;">{{ live_env.weather.humidity }}%
+                    RH</span>
+            </div>
+
+            <!-- Weather Description -->
+            <div class="sensor-chip">
+                <i data-lucide="cloud" size="18"></i>
+                <span>{{ live_env.weather.description }}</span>
+            </div>
+
+            <!-- Peak Hour Status -->
+            <div class="sensor-chip {% if live_env.ctx.is_peak %}active-peak{% endif %}">
+                <i data-lucide="clock" size="18"></i>
+                <span>{{ live_env.ctx.peak_status }}</span>
+            </div>
+
+            <!-- Traffic Density -->
+            <div
+                class="sensor-chip {% if live_env.traffic == 'High' or live_env.traffic == 'Very High' %}active-danger{% endif %}">
+                <i data-lucide="activity" size="18"></i>
+                <span>Traffic: {{ live_env.traffic }}</span>
+            </div>
+
+            <!-- Day Context -->
+            <div class="sensor-chip">
+                <i data-lucide="calendar" size="18"></i>
+                <span>{{ live_env.ctx.day_type }}</span>
+            </div>
+
+            {% if live_env.is_holiday %}
+            <div class="sensor-chip active chip-holiday">
+                <i data-lucide="party-popper" size="18"></i>
+                <span>{{ live_env.holiday_name }}</span>
+            </div>
+            {% endif %}
+
+            {% if live_env.event_flag %}
+            <div class="sensor-chip active chip-event">
+                <i data-lucide="alert-triangle" size="18"></i>
+                <span>Local Event</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <main class="container">
         {% block content %}{% endblock %}
     </main>

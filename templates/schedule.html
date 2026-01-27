@@ -34,16 +34,17 @@
             <div class="prediction-grid" style="margin-top: 3rem;">
                 <div class="prediction-card highlight">
                     <div class="card-header">AI Predicted Delay</div>
-                    <div class="card-value" style="color: var(--accent);">+{{ insights.predicted_delay }}m</div>
-                    <div class="risk-badge risk-{{ insights.risk_level|lower }}">{{ insights.risk_level }} Risk Impact
-                    </div>
+                    <div class="card-value"
+                        style="color: {% if insights.risk_level == 'High' %}var(--danger){% elif insights.risk_level == 'Medium' %}var(--warning){% else %}var(--success){% endif %};">
+                        +{{ insights.predicted_delay }}m</div>
+                    <div class="risk-badge risk-{{ insights.risk_level|lower }}">{{ insights.status_text }}</div>
                 </div>
 
                 <div class="prediction-card">
                     <div class="card-header">Target Arrival</div>
                     <div class="card-value">{{ info.Reach_Time }}</div>
                     <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 8px; font-weight: 800;">
-                        REVISED FROM {{ info.Scheduled_Departure }}
+                        REVISED FROM {{ info.Sched_Reach }}
                     </div>
                 </div>
 

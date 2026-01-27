@@ -19,14 +19,20 @@ def create_deployment_db(limit=20000):
     
     print(f"🚀 Creating reduced deployment DB from {source_path}...")
     
+    if os.path.exists(target_path):
+        print(f"🧹 Removing existing database at {target_path}...")
+        os.remove(target_path)
+    
     if not os.path.exists(source_path):
         print(f"❌ Source file not found: {source_path}")
         return
 
     try:
-        # Load only top N rows to keep DB small for Git/Render
-        df = pd.read_csv(source_path, nrows=limit)
-        print(f"📈 Loaded {len(df)} rows.")
+        # Use random sampling for better data representation across the dataset
+        # This reads the whole file and picks random records
+        full_df = pd.read_csv(source_path)
+        df = full_df.sample(n=min(limit, len(full_df)), random_state=42)
+        print(f"📈 Randomly sampled {len(df)} rows from {len(full_df)} total records.")
 
         # Ensure ID column
         if 'id' not in df.columns:

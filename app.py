@@ -32,42 +32,47 @@ DB = TransportDB()
 if not os.path.exists(config.DB_PATH):
     print(f"CRITICAL WARNING: Database file not found at {config.DB_PATH}")
 
-# Route: Home Page
-@app.route('/')
-def index():
-    # Show rich live telemetry
+def get_live_env():
+    """Shared helper to get rich system context for any page"""
     weather = ENGINE.get_realtime_weather()
-    hour = datetime.now().hour
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now()
+    hour = now.hour
+    date_str = now.strftime("%Y-%m-%d")
     
-    traffic = ENGINE._get_traffic(hour, weather['is_rainy'], 0)
     holiday_name = ENGINE._check_holidays(date_str)
     event_flag = ENGINE._check_events(date_str)
+    traffic = ENGINE._get_traffic(hour, weather['is_rainy'], event_flag)
     
-    # Simple context enrichment
-    ctx = {
-        "is_peak": (8 <= hour <= 11 or 17 <= hour <= 20),
-        "peak_status": "Peak Hours" if (8 <= hour <= 11 or 17 <= hour <= 20) else "Normal Flow",
-        "day_type": "Weekend" if datetime.now().weekday() >= 5 else "Weekday",
-        "event_flag": event_flag or bool(holiday_name),
-        "traffic_status": traffic
-    }
+    is_peak = (8 <= hour <= 11 or 17 <= hour <= 20)
     
-    live_env = {
+    return {
         "weather": weather,
-        "ctx": ctx,
+        "ctx": {
+            "is_peak": is_peak,
+            "peak_status": "Peak Hours" if is_peak else "Normal Flow",
+            "day_type": "Weekend" if now.weekday() >= 5 else "Weekday",
+            "event_flag": event_flag or bool(holiday_name),
+            "traffic_status": traffic
+        },
         "traffic": traffic,
         "holiday_name": holiday_name,
         "is_holiday": bool(holiday_name),
         "event_flag": event_flag
     }
-    return render_template('index.html', live_env=live_env, today_date=date_str)
+
+# Route: Home Page
+@app.route('/')
+def index():
+    live_env = get_live_env()
+    return render_template('index.html', live_env=live_env, today_date=datetime.now().strftime("%Y-%m-%d"))
 
 
 # Route: Manual Prediction Page
 @app.route('/predict')
 def prediction_page():
-    return render_template('prediction.html', today_date=datetime.now().strftime("%Y-%m-%d"))
+    return render_template('prediction.html', 
+                          today_date=datetime.now().strftime("%Y-%m-%d"),
+                          live_env=get_live_env())
 
 # API: Search (Used by Prediction Page) & Form Post
 @app.route('/search', methods=['POST'])
@@ -91,26 +96,7 @@ def search():
     # 1. Get Schedules
     schedules_df = DB.get_schedules_by_route(from_loc, to_loc, t_type, mapped_date)
     
-    weather = ENGINE.get_realtime_weather()
-    hour = datetime.now().hour
-    date_str_now = datetime.now().strftime("%Y-%m-%d")
-    traffic = ENGINE._get_traffic(hour, weather['is_rainy'], 0)
-    holiday_name = ENGINE._check_holidays(date_str_now)
-    event_flag = ENGINE._check_events(date_str_now)
-    
-    live_env = {
-        "weather": weather, 
-        "ctx": {
-            "peak_status": "Peak Hours" if (8 <= hour <= 11 or 17 <= hour <= 20) else "Normal Flow",
-            "day_type": "Weekend" if datetime.now().weekday() >= 5 else "Weekday",
-            "event_flag": event_flag or bool(holiday_name),
-            "traffic_status": traffic
-        },
-        "traffic": traffic,
-        "holiday_name": holiday_name,
-        "is_holiday": bool(holiday_name),
-        "event_flag": event_flag
-    }
+    live_env = get_live_env()
 
 
     # Detect if fallback occurred (mixed modes)
@@ -193,9 +179,16 @@ def _get_tracking_data(service_id, travel_date):
     start_var = 0 if pred['predicted_delay'] == 0 else 2
     actual_start = base_dt + timedelta(minutes=start_var)
     
-    dist = svc_dict.get('Distance_KM', 25.0)
-    spd = 25 if svc_dict.get('Transport_Type') == 'Bus' else 45
-    dur = int((dist/spd)*60)
+    # Duration Logic: Synchronize with Engine
+    scheduled_arrival_str = pred.get('scheduled_arrival', '10:00')
+    predicted_arrival_str = pred.get('predicted_arrival', '10:00')
+    
+    try:
+        arr_dt = datetime.strptime(f"{travel_date} {scheduled_arrival_str}", "%Y-%m-%d %H:%M")
+        dur = int((arr_dt - base_dt).total_seconds() / 60)
+        if dur <= 0: raise ValueError
+    except:
+        dur = 30 # absolute fallback
     
     # Stops logic
     stops = []
@@ -212,6 +205,7 @@ def _get_tracking_data(service_id, travel_date):
     found_current = False
     
     for i, s_name in enumerate(raw_stops):
+        # Precise offset distribution based on Trip Duration
         sched_offset = int(i * (dur / max(1, len(raw_stops)-1)))
         sched_time = base_dt + timedelta(minutes=sched_offset)
         delay_at_stop = int(i * (pred['predicted_delay'] / max(1, len(raw_stops)-1)))
@@ -221,16 +215,7 @@ def _get_tracking_data(service_id, travel_date):
         is_passed = False
         is_current = False
         
-        if is_past:
-             status = "Departed"
-             is_passed = True
-             if i == len(raw_stops) - 1:
-                 status = "Reached"
-        elif is_future:
-             status = "Upcoming"
-             is_passed = False
-        elif is_today:
-             # Existing live logic
+        if is_today:
             if now > est_time + timedelta(minutes=2):
                 status = "Departed"
                 is_passed = True
@@ -238,14 +223,9 @@ def _get_tracking_data(service_id, travel_date):
                 status = "At Station"
                 is_current = True
                 found_current = True
-            elif not found_current and i > 0:
-                prev_delay = int((i-1) * (pred['predicted_delay'] / max(1, len(raw_stops)-1)))
-                prev_sched = int((i-1) * (dur / max(1, len(raw_stops)-1)))
-                prev_est = base_dt + timedelta(minutes=prev_sched + prev_delay)
-                if now > prev_est:
-                    status = "In Transit"
-                    is_current = True
-                    found_current = True
+        elif is_past:
+             status = "Departed" if i < len(raw_stops)-1 else "Reached"
+             is_passed = True
         
         stops.append({
             "name": s_name,
@@ -261,7 +241,11 @@ def _get_tracking_data(service_id, travel_date):
         "info": {
             "Service_ID": svc_dict['Service_ID'],
             "Start_Time": base_dt.strftime("%H:%M"),
-            "Reach_Time": (base_dt + timedelta(minutes=dur + pred['predicted_delay'])).strftime("%H:%M"),
+            "Sched_Reach": scheduled_arrival_str,
+            "Reach_Time": predicted_arrival_str,
+            "From_Location": svc_dict['From_Location'],
+            "To_Location": svc_dict['To_Location'],
+            "Transport_Type": svc_dict['Transport_Type'],
             "Is_Live": is_today and any(s['is_current'] or s['is_passed'] for s in stops) and not all(s['is_passed'] for s in stops)
         },
         "insights": pred,
@@ -277,6 +261,7 @@ def track(service_id):
     data = _get_tracking_data(service_id, travel_date)
     if not data:
         return redirect(url_for('index'))
+    data['live_env'] = get_live_env()
     return render_template('schedule.html', **data)
 
 @app.route('/api/track/<int:service_id>')
@@ -292,24 +277,9 @@ def api_track(service_id):
 
 @app.route('/map')
 def live_map():
-    weather = ENGINE.get_realtime_weather()
-    hour = datetime.now().hour
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    traffic = ENGINE._get_traffic(hour, weather['is_rainy'], 0)
-    holiday_name = ENGINE._check_holidays(date_str)
-    event_flag = ENGINE._check_events(date_str)
-    
-    # Fetch locations for the "From" and "To" dropdowns
+    live_env = get_live_env()
+    # Fetch dynamic locations from database to resolve NameError
     locations = DB.get_locations()
-    
-    live_env = {
-        "weather": weather, 
-        "ctx": {"peak_status": "Active", "day_type": "Live"},
-        "traffic": traffic,
-        "is_holiday": bool(holiday_name),
-        "holiday_name": holiday_name,
-        "event_flag": event_flag
-    }
     return render_template('map.html', live_env=live_env, locations=locations)
 
 @app.route('/api/route', methods=['POST'])
@@ -339,20 +309,7 @@ def api_route_details():
 
 @app.route('/analytics')
 def analytics():
-    weather = ENGINE.get_realtime_weather()
-    hour = datetime.now().hour
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    traffic = ENGINE._get_traffic(hour, weather['is_rainy'], 0)
-    holiday_name = ENGINE._check_holidays(date_str)
-    event_flag = ENGINE._check_events(date_str)
-    live_env = {
-        "weather": weather, 
-        "ctx": {"peak_status": "Active", "day_type": "Live"},
-        "traffic": traffic,
-        "is_holiday": bool(holiday_name),
-        "holiday_name": holiday_name,
-        "event_flag": event_flag
-    }
+    live_env = get_live_env()
     return render_template('analytics.html', live_env=live_env)
 
 
