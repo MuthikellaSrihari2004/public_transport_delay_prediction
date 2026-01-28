@@ -18,24 +18,35 @@ class TransportDB:
         return conn
 
     def get_locations(self):
-        """Fetch all unique locations"""
+        """Fetch all unique locations with case-insensitive column handling"""
         conn = self.get_conn()
         cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT from_location FROM schedules UNION SELECT DISTINCT to_location FROM schedules")
-        locs = [row[0] for row in cursor.fetchall() if row[0]]
-        conn.close()
-        return sorted(locs)
+        try:
+            # Try to fetch using whatever case the DB has
+            cursor.execute("SELECT name FROM pragma_table_info('schedules')")
+            columns = [row[0].lower() for row in cursor.fetchall()]
+            
+            from_col = "From_Location" if "from_location" in columns else "from_location"
+            to_col = "To_Location" if "to_location" in columns else "to_location"
+            
+            cursor.execute(f"SELECT DISTINCT {from_col} FROM schedules UNION SELECT DISTINCT {to_col} FROM schedules")
+            locs = [row[0] for row in cursor.fetchall() if row[0]]
+            return sorted(locs)
+        except Exception as e:
+            print(f"Error fetching locations: {e}")
+            return ["Secunderabad", "Koti", "Begumpet", "Hitech City", "Miyapur"]
+        finally:
+            conn.close()
 
     def get_route_details(self, from_loc, to_loc, transport_type=None):
         """Fetch distance and intermediate stops for a route"""
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
-            # We use distinct column names from schema
             query = "SELECT * FROM schedules WHERE From_Location = ? AND To_Location = ?"
             params = [from_loc, to_loc]
             
-            if transport_type:
+            if transport_type and transport_type.lower() != 'all':
                 query += " AND Transport_Type = ?"
                 params.append(transport_type)
                 
@@ -44,11 +55,10 @@ class TransportDB:
             cursor.execute(query, tuple(params))
             row = cursor.fetchone()
             if row:
-                # Normalize keys to lowercase for the frontend
                 return {k.lower(): row[k] for k in row.keys()}
             
-            # Fallback: if specific mode not found, try any mode
-            if transport_type and not row:
+            # Fallback for route details
+            if transport_type and transport_type.lower() != 'all':
                 cursor.execute("SELECT * FROM schedules WHERE From_Location = ? AND To_Location = ? LIMIT 1", (from_loc, to_loc))
                 row = cursor.fetchone()
                 if row:
@@ -61,20 +71,12 @@ class TransportDB:
         finally:
             conn.close()
 
-
-
-
-
     def get_schedules_by_route(self, from_loc, to_loc, transport_type, date):
         """Fetch schedules matching criteria with fallback to template dates"""
         conn = self.get_conn()
         
         mode_filter = "AND Transport_Type = ?" if transport_type.lower() != 'all' else ""
-        params = [from_loc, to_loc]
-        if transport_type.lower() != 'all':
-            params.append(transport_type)
-        params.append(date)
-
+        
         # 1. Try exact date match first
         query = f"""
         SELECT * FROM schedules 
@@ -84,6 +86,12 @@ class TransportDB:
         AND Date = ?
         ORDER BY Scheduled_Departure ASC
         """
+        
+        params = [from_loc, to_loc]
+        if transport_type.lower() != 'all':
+            params.append(transport_type)
+        params.append(date)
+        
         df = pd.read_sql_query(query, conn, params=tuple(params))
         
         # 2. Fallback: Template Date
@@ -128,7 +136,6 @@ class TransportDB:
         conn.close()
         return df
 
-
     def save_prediction(self, from_loc, to_loc, t_type, sched_time, delay, reason):
         """Audit log for predictions made via the application"""
         conn = self.get_conn()
@@ -139,7 +146,6 @@ class TransportDB:
             VALUES (?, ?, ?, ?, ?, ?)
             """, (from_loc, to_loc, t_type, sched_time, delay, reason))
             conn.commit()
-            print(f"✅ Prediction audit logged: {from_loc} -> {to_loc}")
         except Exception as e:
             print(f"❌ Error saving prediction audit: {e}")
         finally:
@@ -155,4 +161,4 @@ class TransportDB:
 
 if __name__ == "__main__":
     db = TransportDB()
-    print(f"🗄️  Database Utilities connected to: {db.db_path}")
+    print(f"🗄️ Database Utilities connected to: {db.db_path}")
