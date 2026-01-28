@@ -25,7 +25,8 @@
                     </div>
                 </div>
                 <div class="mode-badge {{ info.Transport_Type|lower }}">
-                    <i data-lucide="{% if info.Transport_Type == 'Bus' %}bus{% else %}train{% endif %}" size="16"></i>
+                    <i data-lucide="{% if info.Transport_Type == 'Bus' %}bus{% elif info.Transport_Type == 'Metro' %}train-front{% else %}train{% endif %}"
+                        size="16"></i>
                     {{ info.Transport_Type|upper }}
                 </div>
             </div>

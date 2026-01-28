@@ -114,9 +114,9 @@
                                 {% if s.Transport_Type == 'Bus' %}
                                 <i data-lucide="bus" size="16" style="color: var(--accent);"></i>
                                 {% elif s.Transport_Type == 'Metro' %}
-                                <i data-lucide="train" size="16" style="color: var(--accent-secondary);"></i>
-                                {% elif s.Transport_Type == 'Train' %}
-                                <i data-lucide="train-front" size="16" style="color: var(--warning);"></i>
+                                <i data-lucide="train-front" size="16" style="color: var(--accent-secondary);"></i>
+                                {% else %}
+                                <i data-lucide="train" size="16" style="color: var(--warning);"></i>
                                 {% endif %}
                                 <span style="font-weight: 600;">{{ s.Transport_Type }}</span>
                             </div>
@@ -672,7 +672,9 @@
 
                 let iconHtml = '';
                 if (st.is_current) {
-                    const iconName = data.service.Transport_Type === 'Bus' ? 'bus' : 'train';
+                    let iconName = 'bus';
+                    if (data.service.Transport_Type === 'Metro') iconName = 'train-front';
+                    else if (data.service.Transport_Type === 'Train') iconName = 'train';
                     iconHtml = '<div class="live-status-icon"><i data-lucide="' + iconName + '" size="16"></i></div>';
                 }
 

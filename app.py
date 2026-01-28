@@ -32,10 +32,15 @@ DB = TransportDB()
 if not os.path.exists(config.DB_PATH):
     print(f"CRITICAL WARNING: Database file not found at {config.DB_PATH}")
 
+def get_now_ist():
+    """Helper to get current time in IST (UTC+5:30) for consistency across deployments"""
+    # Use UTC then add offset to ensure it works on any server (Render/Heroku/Local)
+    return datetime.utcnow() + timedelta(hours=5, minutes=30)
+
 def get_live_env():
     """Shared helper to get rich system context for any page"""
     weather = ENGINE.get_realtime_weather()
-    now = datetime.now()
+    now = get_now_ist()
     hour = now.hour
     date_str = now.strftime("%Y-%m-%d")
     
@@ -64,14 +69,14 @@ def get_live_env():
 @app.route('/')
 def index():
     live_env = get_live_env()
-    return render_template('index.html', live_env=live_env, today_date=datetime.now().strftime("%Y-%m-%d"))
+    return render_template('index.html', live_env=live_env, today_date=get_now_ist().strftime("%Y-%m-%d"))
 
 
 # Route: Manual Prediction Page
 @app.route('/predict')
 def prediction_page():
     return render_template('prediction.html', 
-                          today_date=datetime.now().strftime("%Y-%m-%d"),
+                          today_date=get_now_ist().strftime("%Y-%m-%d"),
                           live_env=get_live_env())
 
 # API: Search (Used by Prediction Page) & Form Post
@@ -81,7 +86,7 @@ def search():
     to_loc = request.form.get('to_location', '').strip().title()
     date_str = request.form.get('travel_date', '')
     if not date_str:
-        date_str = datetime.now().strftime("%Y-%m-%d")
+        date_str = get_now_ist().strftime("%Y-%m-%d")
     t_type = request.form.get('transport_type', 'Bus')
     
     # Name Mapping
@@ -129,7 +134,7 @@ def api_search():
     to_loc = data.get('to', '').strip().title()
     date_str = data.get('date', '')
     if not date_str:
-        date_str = datetime.now().strftime("%Y-%m-%d")
+        date_str = get_now_ist().strftime("%Y-%m-%d")
     t_type = data.get('type', 'Bus')
     
     mapping = {"Lb Nagar": "L.B. Nagar", "Hi-Tech City": "Hitech City"}
@@ -178,7 +183,7 @@ def _get_tracking_data(service_id, travel_date):
     try:
         base_dt = datetime.strptime(f"{travel_date} {sch_dep}", "%Y-%m-%d %H:%M")
     except:
-        base_dt = datetime.now()
+        base_dt = get_now_ist()
         
     start_var = 0 if pred['predicted_delay'] == 0 else 2
     actual_start = base_dt + timedelta(minutes=start_var)
@@ -197,7 +202,7 @@ def _get_tracking_data(service_id, travel_date):
     # Stops logic
     stops = []
     raw_stops = svc_dict.get('Stops', '').split('|')
-    now = datetime.now()
+    now = get_now_ist()
     try:
         chk_dt = datetime.strptime(travel_date, "%Y-%m-%d").date()
     except:
@@ -261,7 +266,7 @@ def _get_tracking_data(service_id, travel_date):
 def track(service_id):
     travel_date = request.args.get('date', '')
     if not travel_date:
-        travel_date = datetime.now().strftime("%Y-%m-%d")
+        travel_date = get_now_ist().strftime("%Y-%m-%d")
     data = _get_tracking_data(service_id, travel_date)
     if not data:
         return redirect(url_for('index'))
@@ -272,7 +277,7 @@ def track(service_id):
 def api_track(service_id):
     travel_date = request.args.get('date', '')
     if not travel_date:
-        travel_date = datetime.now().strftime("%Y-%m-%d")
+        travel_date = get_now_ist().strftime("%Y-%m-%d")
     data = _get_tracking_data(service_id, travel_date)
     if not data:
         return {"error": "Not Found"}, 404

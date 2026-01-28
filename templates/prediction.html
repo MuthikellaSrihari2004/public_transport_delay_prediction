@@ -199,8 +199,8 @@
                     const liveDot = p.is_live ? '<span class="live-dot"></span>' : '';
 
                     let icon = 'bus';
-                    if (s.Transport_Type === 'Metro') icon = 'train';
-                    else if (s.Transport_Type === 'Train') icon = 'train-front';
+                    if (s.Transport_Type === 'Metro') icon = 'train-front';
+                    else if (s.Transport_Type === 'Train') icon = 'train';
 
                     html += '<tr class="service-row">' +
                         '<td><div style="display:flex; align-items:center; gap:8px;"><i data-lucide="' + icon + '" size="14"></i>' + s.Transport_Type + '</div></td>' +
