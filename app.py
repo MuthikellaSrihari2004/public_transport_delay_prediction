@@ -158,12 +158,16 @@ def api_search():
     }
 
 def _get_tracking_data(service_id, travel_date):
-    conn = sqlite3.connect('data/transport.db')
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM schedules WHERE id = ?", (service_id,))
-    service = cursor.fetchone()
-    conn.close()
+    try:
+        conn = sqlite3.connect(config.DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM schedules WHERE id = ?", (service_id,))
+        service = cursor.fetchone()
+        conn.close()
+    except Exception as e:
+        print(f"Error connecting to database: {e}")
+        return None
 
     if not service: return None
 

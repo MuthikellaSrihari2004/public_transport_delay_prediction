@@ -27,6 +27,7 @@
         <div class="input-group">
             <label class="input-label">Transport Configuration</label>
             <select id="transport_type" class="input-field">
+                <option value="All">All Systems (Multi-Modal)</option>
                 <option value="Bus">Bus (TSRTC)</option>
                 <option value="Metro">Hyderabad Metro</option>
                 <option value="Train">MMTS Train</option>
@@ -192,16 +193,20 @@
             }
 
             if (data.schedules) {
-                let html = '<table><thead><tr><th>Thread ID</th><th>Sch. Dep</th><th>Predicted Arr</th><th>Status</th><th>Tracking</th></tr></thead><tbody>';
+                let html = '<table><thead><tr><th>Mode</th><th>Thread ID</th><th>Sch. Dep</th><th>Predicted Arr</th><th>Tracking</th></tr></thead><tbody>';
                 data.schedules.forEach(function (s) {
                     const p = s.prediction;
                     const liveDot = p.is_live ? '<span class="live-dot"></span>' : '';
 
+                    let icon = 'bus';
+                    if (s.Transport_Type === 'Metro') icon = 'train';
+                    else if (s.Transport_Type === 'Train') icon = 'train-front';
+
                     html += '<tr class="service-row">' +
+                        '<td><div style="display:flex; align-items:center; gap:8px;"><i data-lucide="' + icon + '" size="14"></i>' + s.Transport_Type + '</div></td>' +
                         '<td><strong style="color:var(--accent)">' + s.Service_ID + '</strong></td>' +
                         '<td>' + s.Scheduled_Departure + '</td>' +
                         '<td>' + p.predicted_arrival + '</td>' +
-                        '<td><span class="risk-badge risk-' + p.risk_level.toLowerCase() + '">' + p.status_text + liveDot + '</span></td>' +
                         '<td><a href="/track/' + s.id + '?date=' + date + '" class="btn-primary" style="padding: 6px 12px; font-size: 0.7rem; text-decoration: none; display: inline-block;">Track</a></td>' +
                         '</tr>';
                 });

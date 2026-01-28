@@ -101,16 +101,21 @@ class TransportEngine:
         traffic_status = "Low"
         if not self._api_disabled and self.traffic_key and self.traffic_key not in ["YOUR_TOMTOM_API_KEY", ""]:
             try:
-                url = f"https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=17.3850,78.4867&key={self.traffic_key}"
-                res = requests.get(url, timeout=1).json() 
-                if "flowSegmentData" in res:
-                    frc = res["flowSegmentData"].get("currentSpeed", 30)
-                    ffs = res["flowSegmentData"].get("freeFlowSpeed", 40)
-                    ratio = frc / ffs
-                    if ratio < 0.4: traffic_status = "Very High"
-                    elif ratio < 0.7: traffic_status = "High"
-                    elif ratio < 0.9: traffic_status = "Medium"
-                    else: traffic_status = "Low"
+                # Cache live API result for 5 minutes
+                if 'live' in self._traffic_cache and self._cache_time and (now - self._cache_time).seconds < 300:
+                    traffic_status = self._traffic_cache['live']
+                else:
+                    url = f"https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=17.3850,78.4867&key={self.traffic_key}"
+                    res = requests.get(url, timeout=1).json() 
+                    if "flowSegmentData" in res:
+                        frc = res["flowSegmentData"].get("currentSpeed", 30)
+                        ffs = res["flowSegmentData"].get("freeFlowSpeed", 40)
+                        ratio = frc / ffs
+                        if ratio < 0.4: traffic_status = "Very High"
+                        elif ratio < 0.7: traffic_status = "High"
+                        elif ratio < 0.9: traffic_status = "Medium"
+                        else: traffic_status = "Low"
+                        self._traffic_cache['live'] = traffic_status
             except Exception:
                 self._api_disabled = True
 
@@ -350,8 +355,22 @@ class TransportEngine:
             df['Dep_Hour'] = pd.to_numeric(df['Scheduled_Departure'].str.split(':').str[0], errors='coerce').fillna(8).astype(int)
             
             # Vectorized Traffic Logic (Simulated lookup based on _get_traffic logic)
-            # Pre-calculate traffic for all 24 hours to avoid loop calls
-            traffic_lut = {h: self._get_traffic(h, weather['is_rainy'], event_flag) for h in range(24)}
+            # Optimization: If it's a future/past date, use simulation. If today, try live API once.
+            is_today = (date_str == now.strftime("%Y-%m-%d"))
+            live_traffic = None
+            if is_today:
+                live_traffic = self._get_traffic(now.hour, weather['is_rainy'], event_flag)
+
+            # Build LUT for all hours
+            traffic_lut = {}
+            for h in range(24):
+                if is_today:
+                    # For today, we might want to blend live traffic with peak hour simulation
+                    # but for simplicity, let's use live if available, or simulate
+                    traffic_lut[h] = live_traffic or self._get_traffic(h, weather['is_rainy'], event_flag)
+                else:
+                    traffic_lut[h] = self._get_traffic(h, weather['is_rainy'], event_flag)
+            
             df['Traffic_Density'] = df['Dep_Hour'].map(traffic_lut)
             
             # Vectorized Load Logic

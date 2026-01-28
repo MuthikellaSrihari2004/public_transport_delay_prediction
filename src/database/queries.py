@@ -69,46 +69,56 @@ class TransportDB:
         """Fetch schedules matching criteria with fallback to template dates"""
         conn = self.get_conn()
         
+        mode_filter = "AND Transport_Type = ?" if transport_type.lower() != 'all' else ""
+        params = [from_loc, to_loc]
+        if transport_type.lower() != 'all':
+            params.append(transport_type)
+        params.append(date)
+
         # 1. Try exact date match first
-        query = """
+        query = f"""
         SELECT * FROM schedules 
-        WHERE from_location = ? 
-        AND to_location = ? 
-        AND transport_type = ? 
-        AND date = ?
-        ORDER BY scheduled_departure ASC
+        WHERE From_Location = ? 
+        AND To_Location = ? 
+        {mode_filter}
+        AND Date = ?
+        ORDER BY Scheduled_Departure ASC
         """
-        df = pd.read_sql_query(query, conn, params=(from_loc, to_loc, transport_type, date))
+        df = pd.read_sql_query(query, conn, params=tuple(params))
         
-        # 2. Fallback: If no specific schedule, use the most recent available schedule as a template
-        # This allows the app to predict for "future" dates by reusing existing patterns
+        # 2. Fallback: Template Date
         if df.empty:
             cursor = conn.cursor()
-            # 2a. Fallback: Same mode, template date
-            check_q = "SELECT DISTINCT date FROM schedules WHERE from_location = ? AND to_location = ? AND transport_type = ? ORDER BY date DESC LIMIT 1"
-            cursor.execute(check_q, (from_loc, to_loc, transport_type))
+            check_q = f"SELECT DISTINCT Date FROM schedules WHERE From_Location = ? AND To_Location = ? {mode_filter} ORDER BY Date DESC LIMIT 1"
+            check_params = [from_loc, to_loc]
+            if transport_type.lower() != 'all':
+                check_params.append(transport_type)
+            
+            cursor.execute(check_q, tuple(check_params))
             row = cursor.fetchone()
             
             if row:
                 template_date = row[0]
-                df = pd.read_sql_query(query, conn, params=(from_loc, to_loc, transport_type, template_date))
+                df_params = [from_loc, to_loc]
+                if transport_type.lower() != 'all':
+                    df_params.append(transport_type)
+                df_params.append(template_date)
+                df = pd.read_sql_query(query, conn, params=tuple(df_params))
                 
-            # 2b. Fallback: ANY mode if specific mode failed
-            if df.empty:
-                # print(f"⚠️ No {transport_type} found. Searching for alternatives...")
+            # 3. Fallback: ANY mode if specific mode failed
+            if df.empty and transport_type.lower() != 'all':
                 alt_query = """
                 SELECT * FROM schedules 
-                WHERE from_location = ? 
-                AND to_location = ? 
-                -- Ignore transport_type restriction
-                AND date = ?
-                ORDER BY scheduled_departure ASC
+                WHERE From_Location = ? 
+                AND To_Location = ? 
+                AND Date = ?
+                ORDER BY Scheduled_Departure ASC
                 """
                 df = pd.read_sql_query(alt_query, conn, params=(from_loc, to_loc, date))
                 
-                # 2c. Fallback: ANY mode, template date
+                # 4. Fallback: ANY mode, template date
                 if df.empty:
-                    check_q_alt = "SELECT DISTINCT date FROM schedules WHERE from_location = ? AND to_location = ? ORDER BY date DESC LIMIT 1"
+                    check_q_alt = "SELECT DISTINCT Date FROM schedules WHERE From_Location = ? AND To_Location = ? ORDER BY Date DESC LIMIT 1"
                     cursor.execute(check_q_alt, (from_loc, to_loc))
                     row_alt = cursor.fetchone()
                     if row_alt:

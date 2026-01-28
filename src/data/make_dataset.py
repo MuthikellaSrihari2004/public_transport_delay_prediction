@@ -29,9 +29,9 @@ def generate_hyderabad_data():
     weather_types = ["Clear", "Rainy", "Foggy", "Overcast", "Cloudy"]
     delay_reasons = ["Traffic Congestion", "Technical Glitch", "Weather Conditions", "Public Rally", "Signal Delay", "Accident"]
     
-    # 1 year range (2025)
-    start_date = datetime(2025, 1, 1)
-    end_date = datetime(2025, 12, 31)
+    # Optimized range (Q1 2026)
+    start_date = datetime(2026, 1, 1)
+    end_date = datetime(2026, 3, 31)
     date_list = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
     
     # Define Routes (Vice-versa)

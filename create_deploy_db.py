@@ -1,3 +1,4 @@
+
 import pandas as pd
 import sqlite3
 from sqlalchemy import create_engine
@@ -12,12 +13,12 @@ import config
 def create_deployment_db(limit=20000):
     """
     Creates a lightweight transport.db for deployment by sampling
-    the processed dataset.
+    the processed dataset equally across transport modes.
     """
     source_path = config.FEATURES_DATA_FILE
     target_path = config.DB_PATH
     
-    print(f"🚀 Creating reduced deployment DB from {source_path}...")
+    print(f"🚀 Creating balanced deployment DB from {source_path}...")
     
     if os.path.exists(target_path):
         print(f"🧹 Removing existing database at {target_path}...")
@@ -28,15 +29,26 @@ def create_deployment_db(limit=20000):
         return
 
     try:
-        # Use random sampling for better data representation across the dataset
-        # This reads the whole file and picks random records
         full_df = pd.read_csv(source_path)
-        df = full_df.sample(n=min(limit, len(full_df)), random_state=42)
-        print(f"📈 Randomly sampled {len(df)} rows from {len(full_df)} total records.")
-
-        # Ensure ID column
-        if 'id' not in df.columns:
-            df.insert(0, 'id', range(1, len(df) + 1))
+        
+        # Determine unique modes
+        modes = full_df['Transport_Type'].unique()
+        limit_per_mode = limit // len(modes)
+        
+        print(f"📊 Detected modes: {list(modes)}")
+        print(f"📈 Sampling {limit_per_mode} latest records for each mode...")
+        
+        sampled_dfs = []
+        for mode in modes:
+            mode_df = full_df[full_df['Transport_Type'] == mode].tail(limit_per_mode)
+            sampled_dfs.append(mode_df)
+            
+        df = pd.concat(sampled_dfs).sort_values(['Date', 'Scheduled_Departure'])
+        
+        # Ensure ID column is unique and starts from 1
+        if 'id' in df.columns:
+            df = df.drop(columns=['id'])
+        df.insert(0, 'id', range(1, len(df) + 1))
 
         # Create/Replace DB
         db_url = f'sqlite:///{os.path.abspath(target_path)}'
@@ -46,6 +58,10 @@ def create_deployment_db(limit=20000):
         
         print(f"✅ Successfully created {target_path} with {len(df)} records.")
         print(f"💾 DB Size: {os.path.getsize(target_path) / (1024*1024):.2f} MB")
+        
+        # Verification snippet
+        print("\n🔍 Verification of records per mode:")
+        print(df['Transport_Type'].value_counts())
         
     except Exception as e:
         print(f"❌ Failed: {e}")

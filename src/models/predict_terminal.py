@@ -39,8 +39,11 @@ def run_interactive():
             if date_input:
                 print(f"⚠️ Invalid format '{date_input}'. Using today: {date_str}")
             
-        t_mode = input("🚌 Mode (Bus/Metro/Train) [Bus]: ").strip()
-        t_type = "Bus" if not t_mode else t_mode.title()
+        t_mode = input("🚌 Mode (Bus/Metro/Train/All) [All]: ").strip().lower()
+        if not t_mode or t_mode == 'all':
+            t_type = 'All'
+        else:
+            t_type = t_mode.title()
     except KeyboardInterrupt:
         print("\n👋 Exiting...")
         return
@@ -54,11 +57,26 @@ def run_interactive():
     print(f"📡 Status: Fetching scheduling threads from vault...", flush=True)
 
     # Query Database
-    schedules_df = db.get_schedules_by_route(origin, dest, t_type, mapped_date)
+    if t_type == 'All':
+        # Fetch for all common modes
+        dfs = []
+        for m in ['Bus', 'Metro', 'Train']:
+            df = db.get_schedules_by_route(origin, dest, m, mapped_date)
+            if not df.empty:
+                dfs.append(df)
+        schedules_df = pd.concat(dfs) if dfs else pd.DataFrame()
+    else:
+        schedules_df = db.get_schedules_by_route(origin, dest, t_type, mapped_date)
     
     if schedules_df.empty:
-        print(f"❌ No matching {t_type} services found for {origin} -> {dest}.")
-        print(f"💡 Tip: Verify location spelling. Available: {['Secunderabad', 'Miyapur', 'Koti', 'Ameerpet'][:4]}...")
+        print(f"\n❌ No matching {t_type} services found for {origin} -> {dest} on {date_str}.")
+        # Show some available locations to help the user
+        try:
+            locs = db.get_locations()
+            if locs:
+                print(f"💡 Available locations ({len(locs)}): {', '.join(locs[:10])}...")
+        except:
+            pass
         return
 
     print(f"🧠 Status: Running ML Inference on {len(schedules_df)} threads...", flush=True)
@@ -72,12 +90,12 @@ def run_interactive():
         return
 
     print(f"\n📋 FOUND {len(processed_schedules)} SERVICES:")
-    print(f"{'IDX':<5} | {'SERVICE ID':<18} | {'DEP TIME':<10} | {'PREDICTED ARRIVAL'}")
-    print("-" * 70)
+    print(f"{'IDX':<5} | {'MODE':<8} | {'SERVICE ID':<18} | {'DEP TIME':<10} | {'PREDICTED ARRIVAL'}")
+    print("-" * 80)
     
     for i, svc in enumerate(processed_schedules):
         pred = svc['prediction']
-        print(f"{i+1:<5} | {svc.get('Service_ID', 'UNK'):<18} | {svc.get('Scheduled_Departure', '--:--'):<10} | {pred['predicted_arrival']}")
+        print(f"{i+1:<5} | {svc.get('Transport_Type', 'UNK'):<8} | {svc.get('Service_ID', 'UNK'):<18} | {svc.get('Scheduled_Departure', '--:--'):<10} | {pred['predicted_arrival']}")
         
     try:
         user_choice = input("\n🔢 Index to Track (or Enter to quit): ").strip()
@@ -87,6 +105,10 @@ def run_interactive():
             print("❌ Invalid selection.")
             return
     except ValueError:
+        print("👋 Returning to main menu...")
+        return
+    except Exception as e:
+        print(f"❌ Selection error: {e}")
         return
         
     selected_service = processed_schedules[sel_idx]
@@ -102,20 +124,22 @@ def run_interactive():
     
     # Timeline details
     dist = selected_service.get('Distance_KM', config.DEFAULT_DISTANCE_KM)
-    spd = config.SPEED_ESTIMATES.get(t_type, 30)
+    mode_for_spd = selected_service.get('Transport_Type', 'Bus')
+    spd = config.SPEED_ESTIMATES.get(mode_for_spd, 30)
     base_dur = int((dist / spd) * 60)
     
     print("\n" + "═"*70)
     print(f"🎯 JOURNEY INSIGHTS")
     print("═"*70)
-    print(f"🚦 Predicted Status:   {result['status_text']}")
-    print(f"🔮 Estimated Delay:   +{result['predicted_delay']} Min")
-    print(f"📝 Contributing Factor: {result['reason']}")
-    print(f"📡 Risk Level:         {result['risk_level']}")
-    print(f"💡 Recommendation:     {result['recommendation']}")
+    print(f"🚦 Predicted Status:   {result.get('status_text', 'UNKNOWN')}")
+    print(f"🔮 Estimated Delay:   +{result.get('predicted_delay', 0)} Min")
+    print(f"📝 Contributing Factor: {result.get('reason', 'N/A')}")
+    print(f"📡 Risk Level:         {result.get('risk_level', 'Unknown')}")
+    print(f"💡 Recommendation:     {result.get('recommendation', 'N/A')}")
     print("-" * 70)
     print(f"🕒 Scheduled Dep:      {sch_dep}")
-    print(f"🕒 Predicted Arr:      {result['predicted_arrival']}")
+    print(f"🕒 Scheduled Arr:      {result.get('scheduled_arrival', '--:--')}")
+    print(f"🕒 Predicted Arr:      {result.get('predicted_arrival', '--:--')}")
     print("═"*70)
     
     # Live Stop Tracking

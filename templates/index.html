@@ -69,6 +69,8 @@
         <div class="input-group">
             <label class="input-label">Mode</label>
             <select name="transport_type" class="input-field">
+                <option value="All" {% if t_type=='All' or not t_type %}selected{% endif %}>All Systems (Multi-Modal)
+                </option>
                 <option value="Bus" {% if t_type=='Bus' %}selected{% endif %}>Bus (TSRTC)</option>
                 <option value="Metro" {% if t_type=='Metro' %}selected{% endif %}>Metro</option>
                 <option value="Train" {% if t_type=='Train' %}selected{% endif %}>MMTS Train</option>
