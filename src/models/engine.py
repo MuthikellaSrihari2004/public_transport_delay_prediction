@@ -196,8 +196,7 @@ class TransportEngine:
         load_variance = rng.randint(-10, 15)
         passenger_load = max(0, min(100, base_load + load_variance))
 
-        # Prediction Logic
-        delay = 0
+        # ML Output
         if self.model and self.encoders:
             try:
                 # Prepare data for XGBoost
@@ -228,15 +227,14 @@ class TransportEngine:
                         input_data[col] = le.transform([val])[0] if val in le.classes_ else 0
                 
                 # ML Output
-                delay = int(self.model.predict(input_data)[0])
-                delay += rng.randint(-2, 4) # Consistency Noise
-                delay = max(0, delay)
+                base_delay = int(self.model.predict(input_data)[0])
+                delay = self._apply_deterministic_noise(base_delay, service.get('Service_ID'), date_str)
                 
             except Exception as e:
                 print(f"ML Processing Failure: {e}")
-                delay = rng.randint(5, 15)
+                delay = self._apply_deterministic_noise(10, service.get('Service_ID'), date_str)
         else:
-            delay = rng.randint(0, 45)
+            delay = self._apply_deterministic_noise(15, service.get('Service_ID'), date_str)
 
         # Human-readable Status
         if delay <= 10: status = "ON TIME"
@@ -331,6 +329,14 @@ class TransportEngine:
         if delay > 5:
             return "Minor Technical Glitch"
         return "Unknown Operational Variance"
+
+    def _apply_deterministic_noise(self, base_delay, service_id, date_str):
+        """Applies consistent noise based on service ID and date to ensure same result across calls"""
+        seed_str = f"{service_id}_{date_str}"
+        seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest(), 16)
+        rng = random.Random(seed_hash)
+        noise = rng.randint(-2, 3) 
+        return max(0, int(base_delay) + noise)
 
     def process_batch(self, schedules, date_str):
         """ULTRA-RESILIENT BATCH PROCESSING: Guaranteed to return results even on ML failure"""
@@ -438,13 +444,13 @@ class TransportEngine:
                     pred_df = pred_df.apply(pd.to_numeric, errors='coerce').fillna(0)
                     
                     # The actual prediction
-                    df['Delay'] = self.model.predict(pred_df)
-                    df['Delay'] = df['Delay'].apply(lambda x: max(0, int(x) + random.randint(-1, 2)))
+                    base_delays = self.model.predict(pred_df)
+                    df['Delay'] = [self._apply_deterministic_noise(d, final_results[i].get('Service_ID'), date_str) for i, d in enumerate(base_delays)]
                 except Exception as e_inner:
                     print(f"⚠️ ML Prediction Error: {e_inner}")
-                    df['Delay'] = df['Passenger_Load'].apply(lambda x: int(x/4) + random.randint(0, 10))
+                    df['Delay'] = df.apply(lambda row: self._apply_deterministic_noise(int(row['Passenger_Load']/4), row.get('Service_ID'), date_str), axis=1)
             else:
-                df['Delay'] = 5
+                df['Delay'] = df.apply(lambda row: self._apply_deterministic_noise(5, row.get('Service_ID'), date_str), axis=1)
 
             # 6. Update predictions in final_results
             for i, row in df.iterrows():

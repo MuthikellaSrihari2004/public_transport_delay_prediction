@@ -178,12 +178,11 @@ LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 # PREDICTION ENGINE SETTINGS
 # ============================================================================
 
-# Delay categories
+# Delay categories (Standardized: 0-10, 11-20, >20)
 DELAY_CATEGORY_THRESHOLDS = {
-    "on_time": (0, 5),
-    "minor_delay": (5, 15),
-    "moderate_delay": (15, 30),
-    "major_delay": (30, float('inf'))
+    "on_time": (0, 10),
+    "minor_delay": (10, 20),
+    "major_delay": (20, float('inf'))
 }
 
 # Default prediction parameters
@@ -200,6 +199,13 @@ SPEED_ESTIMATES = {
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
+
+from datetime import datetime, timedelta
+
+def get_now_ist():
+    """Helper to get current time in IST (UTC+5:30) for consistency across deployments"""
+    import datetime as dt
+    return dt.datetime.utcnow() + dt.timedelta(hours=5, minutes=30)
 
 def ensure_directories():
     """Create all necessary directories if they don't exist"""

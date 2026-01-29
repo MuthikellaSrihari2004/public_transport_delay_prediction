@@ -33,9 +33,7 @@ if not os.path.exists(config.DB_PATH):
     print(f"CRITICAL WARNING: Database file not found at {config.DB_PATH}")
 
 def get_now_ist():
-    """Helper to get current time in IST (UTC+5:30) for consistency across deployments"""
-    # Use UTC then add offset to ensure it works on any server (Render/Heroku/Local)
-    return datetime.utcnow() + timedelta(hours=5, minutes=30)
+    return config.get_now_ist()
 
 def get_live_env():
     """Shared helper to get rich system context for any page"""

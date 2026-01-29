@@ -35,7 +35,7 @@ def run_interactive():
             else:
                 raise ValueError("Empty input")
         except ValueError:
-            date_str = datetime.now().strftime("%Y-%m-%d")
+            date_str = config.get_now_ist().strftime("%Y-%m-%d")
             if date_input:
                 print(f"⚠️ Invalid format '{date_input}'. Using today: {date_str}")
             
@@ -121,12 +121,16 @@ def run_interactive():
         dep_time_obj = datetime.strptime(f"{date_str} {sch_dep}", "%Y-%m-%d %H:%M")
     except:
         dep_time_obj = datetime.now()
-    
-    # Timeline details
-    dist = selected_service.get('Distance_KM', config.DEFAULT_DISTANCE_KM)
-    mode_for_spd = selected_service.get('Transport_Type', 'Bus')
-    spd = config.SPEED_ESTIMATES.get(mode_for_spd, 30)
-    base_dur = int((dist / spd) * 60)
+    # Timeline details - Synchronize with Engine
+    sch_arr = result.get('scheduled_arrival')
+    try:
+        arr_dt = datetime.strptime(f"{date_str} {sch_arr}", "%Y-%m-%d %H:%M")
+        base_dur = int((arr_dt - dep_time_obj).total_seconds() / 60)
+    except:
+        dist = selected_service.get('Distance_KM', config.DEFAULT_DISTANCE_KM)
+        mode_for_spd = selected_service.get('Transport_Type', 'Bus')
+        spd = config.SPEED_ESTIMATES.get(mode_for_spd, 30)
+        base_dur = int((dist / spd) * 60)
     
     print("\n" + "═"*70)
     print(f"🎯 JOURNEY INSIGHTS")
@@ -143,12 +147,12 @@ def run_interactive():
     print("═"*70)
     
     # Live Stop Tracking
-    now = datetime.now()
+    now = config.get_now_ist()
     stops_raw = selected_service.get('Stops', '').split('|')
     total_time = base_dur + result.get('predicted_delay', 0)
     time_per_stop = total_time / max(1, (len(stops_raw) - 1))
     
-    print(f"\n📍 NODE TRACKING (System Time: {now.strftime('%H:%M:%S')})")
+    print(f"\n📍 NODE TRACKING (System IST: {now.strftime('%H:%M:%S')})")
     print(f"{'STATION NAME':<25} | {'EST. TIME':<10} | {'TELEMETRY STATUS'}")
     print("-" * 70)
     
