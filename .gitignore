@@ -84,6 +84,3 @@ htmlcov/
 # OS
 Thumbs.db
 .DS_Store
-
-# Large Media
-*.mp4
