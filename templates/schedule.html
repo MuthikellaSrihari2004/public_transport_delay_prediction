@@ -335,7 +335,7 @@
 
     .stop-node {
         position: relative;
-        padding-left: 45px;
+        padding-left: 55px;
         margin-bottom: 2rem;
     }
 
@@ -375,10 +375,91 @@
     }
 
     .stop-node.active .stop-marker {
-        background: var(--accent);
-        border-color: #fff;
-        transform: scale(1.3);
-        box-shadow: 0 0 15px var(--accent);
+        background: transparent;
+        border-color: transparent;
+        transform: scale(1);
+        box-shadow: none;
+        width: 0;
+        height: 0;
+        overflow: visible;
+    }
+
+    /* ===== VEHICLE ICON ON TIMELINE ===== */
+    .vehicle-on-timeline {
+        position: absolute;
+        left: 3px;
+        top: -4px;
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        z-index: 10;
+        border: 3px solid #fff;
+        box-shadow: 0 0 20px rgba(56, 189, 248, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+        animation: vehicleBounce 2s ease-in-out infinite;
+    }
+
+    .vehicle-on-timeline.bus-vehicle {
+        background: linear-gradient(135deg, #4285F4, #1a73e8);
+    }
+
+    .vehicle-on-timeline.metro-vehicle {
+        background: linear-gradient(135deg, #EA4335, #c5221f);
+    }
+
+    .vehicle-on-timeline.train-vehicle {
+        background: linear-gradient(135deg, #FBBC04, #e8a000);
+    }
+
+    @keyframes vehicleBounce {
+
+        0%,
+        100% {
+            transform: translateY(0px);
+        }
+
+        50% {
+            transform: translateY(-4px);
+        }
+    }
+
+    /* Pulse ring behind the vehicle icon */
+    .vehicle-pulse-ring {
+        position: absolute;
+        left: 3px;
+        top: -4px;
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        z-index: 9;
+        animation: vehicleRingPulse 2s ease-out infinite;
+    }
+
+    .vehicle-pulse-ring.bus-ring {
+        background: rgba(66, 133, 244, 0.4);
+    }
+
+    .vehicle-pulse-ring.metro-ring {
+        background: rgba(234, 67, 53, 0.4);
+    }
+
+    .vehicle-pulse-ring.train-ring {
+        background: rgba(251, 188, 4, 0.4);
+    }
+
+    @keyframes vehicleRingPulse {
+        0% {
+            transform: scale(1);
+            opacity: 0.7;
+        }
+
+        100% {
+            transform: scale(2.5);
+            opacity: 0;
+        }
     }
 
     .marker-ping {
@@ -400,6 +481,75 @@
             transform: scale(3);
             opacity: 0;
         }
+    }
+
+    /* Delay diff badge on each stop */
+    .delay-diff-badge {
+        font-size: 0.6rem;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 6px;
+        margin-top: 4px;
+        display: inline-block;
+    }
+
+    .delay-diff-badge.on-time {
+        background: rgba(16, 185, 129, 0.15);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .delay-diff-badge.minor-delay {
+        background: rgba(245, 158, 11, 0.15);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .delay-diff-badge.major-delay {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    /* ETA countdown at top of tracker */
+    .eta-banner {
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(56, 189, 248, 0.02));
+        border: 1px solid rgba(56, 189, 248, 0.2);
+        border-radius: 16px;
+        padding: 14px 20px;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .eta-banner .eta-label {
+        font-size: 0.65rem;
+        color: var(--text-muted);
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .eta-banner .eta-value {
+        font-size: 1.4rem;
+        font-weight: 900;
+        color: var(--accent);
+        font-family: monospace;
+    }
+
+    .eta-banner .eta-vehicle-badge {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #fff;
+    }
+
+    .eta-banner .eta-vehicle-emoji {
+        font-size: 1.6rem;
+        animation: vehicleBounce 2s ease-in-out infinite;
     }
 
     .stop-info-card {
@@ -581,6 +731,21 @@
                 </div>
             </div>
 
+            <!-- ETA Banner with Vehicle Icon -->
+            <div class="eta-banner">
+                <div>
+                    <div class="eta-label">Estimated Arrival</div>
+                    <div class="eta-value" id="eta-countdown">{{ info.Reach_Time }}</div>
+                </div>
+                <div class="eta-vehicle-badge">
+                    <span class="eta-vehicle-emoji">
+                        {% if info.Transport_Type == 'Bus' %}🚌{% elif info.Transport_Type == 'Metro' %}🚇{% else %}🚂{%
+                        endif %}
+                    </span>
+                    <span>{{ info.Transport_Type }} {{ info.Service_ID }}</span>
+                </div>
+            </div>
+
             <div class="timeline-elite enhanced">
                 {% for stop in stops %}
                 <div
@@ -588,7 +753,16 @@
                     <div class="stop-line"></div>
                     <div class="stop-marker">
                         {% if stop.is_current %}
-                        <div class="marker-ping"></div>
+                        <!-- VEHICLE ICON at current station -->
+                        <div
+                            class="vehicle-pulse-ring {% if info.Transport_Type == 'Bus' %}bus-ring{% elif info.Transport_Type == 'Metro' %}metro-ring{% else %}train-ring{% endif %}">
+                        </div>
+                        <div
+                            class="vehicle-on-timeline {% if info.Transport_Type == 'Bus' %}bus-vehicle{% elif info.Transport_Type == 'Metro' %}metro-vehicle{% else %}train-vehicle{% endif %}">
+                            {% if info.Transport_Type == 'Bus' %}🚌{% elif info.Transport_Type == 'Metro' %}🚇{% else
+                            %}🚂{% endif %}
+                        </div>
+                        {% elif not stop.is_passed %}
                         {% endif %}
                     </div>
                     <div class="stop-info-card">
@@ -604,6 +778,14 @@
                             <div class="time-group highlight">
                                 <label>ESTIMATED</label>
                                 <span>{{ stop.est }}</span>
+                                {% if stop.sched != stop.est %}
+                                <span
+                                    class="delay-diff-badge {% if insights.predicted_delay <= 10 %}on-time{% elif insights.predicted_delay <= 20 %}minor-delay{% else %}major-delay{% endif %}">
+                                    +{{ insights.predicted_delay }}m delay
+                                </span>
+                                {% else %}
+                                <span class="delay-diff-badge on-time">On Time</span>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -616,6 +798,13 @@
 
 <script>
     if (window.lucide) lucide.createIcons();
+
+    // Reach time from backend
+    const reachTimeStr = "{{ info.Reach_Time }}";
+    const startTimeStr = "{{ info.Start_Time }}";
+    const predictedDelay = {{ insights.predicted_delay }};
+    const isLive = {{ 'true' if info.Is_Live else 'false' }};
+
     function updateClock() {
         const now = new Date();
         const timeStr = now.getHours().toString().padStart(2, '0') + ':' +
@@ -623,7 +812,31 @@
             now.getSeconds().toString().padStart(2, '0');
         const clockEl = document.getElementById('live-clock');
         if (clockEl) clockEl.textContent = timeStr;
+
+        // Update ETA countdown  
+        const etaEl = document.getElementById('eta-countdown');
+        if (etaEl && reachTimeStr) {
+            const [rh, rm] = reachTimeStr.split(':').map(Number);
+            const reachDate = new Date();
+            reachDate.setHours(rh, rm, 0, 0);
+
+            const diffMs = reachDate - now;
+            if (diffMs > 0) {
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffSecs = Math.floor((diffMs % 60000) / 1000);
+                etaEl.textContent = `${reachTimeStr} (in ${diffMins}m ${diffSecs}s)`;
+            } else {
+                etaEl.textContent = `${reachTimeStr} (Arrived)`;
+            }
+        }
     }
+
     setInterval(updateClock, 1000);
+    updateClock();
+
+    // Auto-refresh tracking data every 30 seconds if live
+    if (isLive) {
+        setTimeout(() => { window.location.reload(); }, 30000);
+    }
 </script>
 {% endblock %}
