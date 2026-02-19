@@ -209,35 +209,70 @@ def _get_tracking_data(service_id, travel_date):
     is_today = (chk_dt == now.date())
     is_past = (chk_dt < now.date())
     is_future = (chk_dt > now.date())
-    found_current = False
     
+    # First pass: compute all estimated times for each stop
+    stop_data = []
     for i, s_name in enumerate(raw_stops):
-        # Precise offset distribution based on Trip Duration
         sched_offset = int(i * (dur / max(1, len(raw_stops)-1)))
         sched_time = base_dt + timedelta(minutes=sched_offset)
         delay_at_stop = int(i * (pred['predicted_delay'] / max(1, len(raw_stops)-1)))
         est_time = base_dt + timedelta(minutes=sched_offset + delay_at_stop)
+        stop_data.append({
+            "name": s_name,
+            "sched_time": sched_time,
+            "est_time": est_time,
+        })
+    
+    # Second pass: determine which stop is the current active one based on estimated times
+    active_index = -1
+    if is_today:
+        # Find the current position: the vehicle is at the last stop whose est_time has passed,
+        # or approaching the first stop whose est_time hasn't passed yet
+        last_passed_idx = -1
+        for i, sd in enumerate(stop_data):
+            if now >= sd['est_time']:
+                last_passed_idx = i
         
+        if last_passed_idx == -1:
+            # Haven't reached first stop yet - mark first stop as active (approaching)
+            active_index = 0
+        elif last_passed_idx == len(stop_data) - 1:
+            # Passed all stops - journey complete, mark last as active
+            active_index = last_passed_idx
+        else:
+            # Between stops - mark the next upcoming stop as active
+            active_index = last_passed_idx + 1
+    elif is_future:
+        # For future dates, mark the first stop as active
+        active_index = 0
+    # For past dates, all stops are departed, no active stop needed
+    
+    for i, sd in enumerate(stop_data):
         status = "Upcoming"
         is_passed = False
-        is_current = False
+        is_current = (i == active_index)
         
         if is_today:
-            if now > est_time + timedelta(minutes=2):
+            if i < active_index:
                 status = "Departed"
                 is_passed = True
-            elif now >= est_time - timedelta(minutes=2):
+            elif is_current:
                 status = "At Station"
-                is_current = True
-                found_current = True
+            else:
+                status = "Upcoming"
         elif is_past:
-             status = "Departed" if i < len(raw_stops)-1 else "Reached"
-             is_passed = True
+            status = "Departed" if i < len(stop_data)-1 else "Reached"
+            is_passed = True
+        elif is_future:
+            if is_current:
+                status = "Boarding"
+            else:
+                status = "Upcoming"
         
         stops.append({
-            "name": s_name,
-            "est": est_time.strftime("%H:%M"),
-            "sched": sched_time.strftime("%H:%M"),
+            "name": sd['name'],
+            "est": sd['est_time'].strftime("%H:%M"),
+            "sched": sd['sched_time'].strftime("%H:%M"),
             "is_passed": is_passed,
             "is_current": is_current,
             "status": status
