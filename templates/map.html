@@ -37,12 +37,8 @@
                 <div class="input-group">
                     <label class="input-label">Origin</label>
                     <div style="display: flex; gap: 8px;">
-                        <select id="map-origin" class="input-field">
-                            <option value="">Select Origin</option>
-                            {% for loc in locations %}
-                            <option value="{{ loc }}">{{ loc }}</option>
-                            {% endfor %}
-                        </select>
+                        <input type="text" id="map-origin" class="input-field" placeholder="Type origin..." autocomplete="off">
+                        <div id="map-origin-suggestions" class="autocomplete-suggestions"></div>
                         <button id="gps-btn" class="btn-icon" title="Use My Location" onclick="useMyLocation()">
                             <i data-lucide="crosshair" size="18"></i>
                         </button>
@@ -50,12 +46,8 @@
                 </div>
                 <div class="input-group">
                     <label class="input-label">Destination</label>
-                    <select id="map-dest" class="input-field">
-                        <option value="">Select Destination</option>
-                        {% for loc in locations %}
-                        <option value="{{ loc }}">{{ loc }}</option>
-                        {% endfor %}
-                    </select>
+                    <input type="text" id="map-dest" class="input-field" placeholder="Type destination..." autocomplete="off">
+                    <div id="map-dest-suggestions" class="autocomplete-suggestions"></div>
                 </div>
                 <button id="visualize-btn" class="btn-primary">
                     <i data-lucide="navigation-2" style="margin-right: 8px;"></i> Start Navigation
@@ -389,6 +381,34 @@
             opacity: 0.3;
         }
     }
+
+    /* Layer Control Styling */
+    .leaflet-control-layers {
+        background: rgba(15, 23, 42, 0.9) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 12px !important;
+        padding: 10px 14px !important;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+        color: #e2e8f0 !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.8rem !important;
+    }
+
+    .leaflet-control-layers label {
+        color: #e2e8f0 !important;
+        font-weight: 500;
+        margin-bottom: 4px;
+        display: flex !important;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        padding: 4px 0;
+    }
+
+    .leaflet-control-layers-separator {
+        border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
 </style>
 
 <script>
@@ -398,6 +418,7 @@
     let markersLayer = null;
     let vehicleAnimationId = null; // track animation frame
     let vehicleMarker = null;     // the moving vehicle marker
+    let allLocations = [];         // dynamically fetched from API
 
     // Coordinate Database (Approximate for Hyderabad)
     const locCoords = {
@@ -418,6 +439,110 @@
         "Begumpet": [17.4447, 78.4664],
         "Hyderabad": [17.3850, 78.4867]
     };
+
+    // ========== AUTOCOMPLETE SYSTEM ==========
+    async function fetchLocations() {
+        try {
+            const res = await fetch('/api/locations');
+            allLocations = await res.json();
+        } catch (e) {
+            console.warn('Failed to fetch locations, using fallback');
+            allLocations = Object.keys(locCoords);
+        }
+    }
+
+    function setupMapAutocomplete(inputId, sugId) {
+        const input = document.getElementById(inputId);
+        const sugBox = document.getElementById(sugId);
+        if (!input || !sugBox) return;
+
+        let activeIdx = -1;
+
+        input.addEventListener('input', function () {
+            const query = input.value.toLowerCase().trim();
+            sugBox.innerHTML = '';
+            activeIdx = -1;
+
+            if (query.length === 0) {
+                sugBox.style.display = 'none';
+                return;
+            }
+
+            // Sort: starts-with matches first, then includes matches
+            const startsWithArr = allLocations.filter(l => l.toLowerCase().startsWith(query));
+            const includesArr = allLocations.filter(l => !l.toLowerCase().startsWith(query) && l.toLowerCase().includes(query));
+            const filtered = [...startsWithArr, ...includesArr];
+
+            if (filtered.length === 0) {
+                sugBox.style.display = 'none';
+                return;
+            }
+
+            sugBox.style.display = 'block';
+            filtered.forEach((loc, idx) => {
+                const div = document.createElement('div');
+                div.className = 'suggestion-item';
+                // Highlight matching text
+                const matchIdx = loc.toLowerCase().indexOf(query);
+                if (matchIdx >= 0) {
+                    div.innerHTML =
+                        loc.substring(0, matchIdx) +
+                        '<strong style="color: var(--accent);">' +
+                        loc.substring(matchIdx, matchIdx + query.length) +
+                        '</strong>' +
+                        loc.substring(matchIdx + query.length);
+                } else {
+                    div.textContent = loc;
+                }
+                div.addEventListener('mousedown', function (e) {
+                    e.preventDefault(); // Prevent blur from hiding dropdown before selection
+                    input.value = loc;
+                    sugBox.style.display = 'none';
+                    sugBox.innerHTML = '';
+                });
+                sugBox.appendChild(div);
+            });
+        });
+
+        // Keyboard navigation
+        input.addEventListener('keydown', function (e) {
+            const items = sugBox.querySelectorAll('.suggestion-item');
+            if (!items.length) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeIdx = Math.min(activeIdx + 1, items.length - 1);
+                items.forEach((it, i) => it.classList.toggle('suggestion-active', i === activeIdx));
+                items[activeIdx].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIdx = Math.max(activeIdx - 1, 0);
+                items.forEach((it, i) => it.classList.toggle('suggestion-active', i === activeIdx));
+                items[activeIdx].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (activeIdx >= 0 && activeIdx < items.length) {
+                    input.value = allLocations.find(l => l.toLowerCase().includes(items[activeIdx].textContent.toLowerCase())) || items[activeIdx].textContent;
+                    sugBox.style.display = 'none';
+                    sugBox.innerHTML = '';
+                }
+            } else if (e.key === 'Escape') {
+                sugBox.style.display = 'none';
+            }
+        });
+
+        // Close on blur (with slight delay to allow click)
+        input.addEventListener('blur', function () {
+            setTimeout(() => { sugBox.style.display = 'none'; }, 200);
+        });
+
+        // Show suggestions again on focus if there's text
+        input.addEventListener('focus', function () {
+            if (input.value.trim().length > 0) {
+                input.dispatchEvent(new Event('input'));
+            }
+        });
+    }
 
     // Get the vehicle emoji and CSS class based on selected mode
     function getVehicleConfig(mode) {
@@ -564,12 +689,34 @@
 
     function initMap() {
         // Initialize Leaflet Map
-        map = L.map('map').setView([17.3850, 78.4867], 12);
+        map = L.map('map', { zoomControl: true }).setView([17.3850, 78.4867], 12);
 
-        // Use OpenStreetMap Tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+        // Google Maps Tile Layers
+        const googleRoads = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            attribution: '&copy; Google Maps'
+        });
+
+        const googleSatellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            attribution: '&copy; Google Maps'
+        });
+
+        const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            attribution: '&copy; Google Maps'
+        });
+
+        // Default to Road view
+        googleRoads.addTo(map);
+
+        // Layer control
+        const baseLayers = {
+            "🗺️ Road Map": googleRoads,
+            "🛰️ Satellite": googleSatellite,
+            "🌍 Hybrid": googleHybrid
+        };
+        L.control.layers(baseLayers, null, { position: 'topright', collapsed: false }).addTo(map);
 
         routeLayer = L.layerGroup().addTo(map);
         markersLayer = L.layerGroup().addTo(map);
@@ -586,17 +733,44 @@
         btn.innerHTML = '<i data-lucide="loader-2" class="pulse"></i>';
         if (window.lucide) lucide.createIcons();
 
-        setTimeout(() => {
-            document.getElementById('map-origin').value = "Secunderabad";
-            btn.innerHTML = '<i data-lucide="crosshair"></i>';
-            if (window.lucide) lucide.createIcons();
-            alert("GPS Signal Locked: Secunderabad (Simulated)");
-        }, 1200);
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    // Find nearest known location
+                    let nearest = 'Secunderabad';
+                    let minDist = Infinity;
+                    for (const [name, coords] of Object.entries(locCoords)) {
+                        const d = Math.sqrt(Math.pow(pos.coords.latitude - coords[0], 2) + Math.pow(pos.coords.longitude - coords[1], 2));
+                        if (d < minDist) { minDist = d; nearest = name; }
+                    }
+                    document.getElementById('map-origin').value = nearest;
+                    btn.innerHTML = '<i data-lucide="crosshair"></i>';
+                    if (window.lucide) lucide.createIcons();
+                },
+                function () {
+                    document.getElementById('map-origin').value = 'Secunderabad';
+                    btn.innerHTML = '<i data-lucide="crosshair"></i>';
+                    if (window.lucide) lucide.createIcons();
+                },
+                { timeout: 5000 }
+            );
+        } else {
+            setTimeout(() => {
+                document.getElementById('map-origin').value = 'Secunderabad';
+                btn.innerHTML = '<i data-lucide="crosshair"></i>';
+                if (window.lucide) lucide.createIcons();
+            }, 1200);
+        }
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('DOMContentLoaded', async function () {
         if (window.lucide) window.lucide.createIcons();
         initMap();
+
+        // Fetch locations and setup autocomplete
+        await fetchLocations();
+        setupMapAutocomplete('map-origin', 'map-origin-suggestions');
+        setupMapAutocomplete('map-dest', 'map-dest-suggestions');
 
         document.getElementById('visualize-btn').addEventListener('click', async () => {
             const from = document.getElementById('map-origin').value;

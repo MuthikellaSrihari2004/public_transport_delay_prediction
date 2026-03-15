@@ -364,9 +364,27 @@ header {
     color: var(--text-dim);
 }
 
-.suggestion-item:hover {
+.suggestion-item:hover,
+.suggestion-item.suggestion-active {
     background: rgba(56, 189, 248, 0.1);
     color: var(--accent);
+}
+
+.autocomplete-suggestions::-webkit-scrollbar {
+    width: 6px;
+}
+
+.autocomplete-suggestions::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.autocomplete-suggestions::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.autocomplete-suggestions::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 /* Dashboard Layouts */

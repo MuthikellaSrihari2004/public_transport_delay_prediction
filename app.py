@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 import os
 import sys
 from datetime import datetime, timedelta
@@ -320,9 +320,7 @@ def api_track(service_id):
 @app.route('/map')
 def live_map():
     live_env = get_live_env()
-    # Fetch dynamic locations from database to resolve NameError
-    locations = DB.get_locations()
-    return render_template('map.html', live_env=live_env, locations=locations)
+    return render_template('map.html', live_env=live_env)
 
 @app.route('/api/route', methods=['POST'])
 def api_route_details():
@@ -347,6 +345,13 @@ def api_route_details():
     return details
 
 
+
+
+@app.route('/api/locations')
+def api_locations():
+    """Return all unique locations from the database for autocomplete"""
+    locations = DB.get_locations()
+    return jsonify(locations)
 
 
 @app.route('/analytics')

@@ -113,33 +113,82 @@
 </div>
 
 <script>
-    const locations = ["Secunderabad", "Koti", "Mehdipatnam", "Charminar", "Ameerpet", "Hitech City", "Gachibowli", "Miyapur", "Uppal", "L.B. Nagar"];
+    let locations = [];
+
+    async function initAutocomplete() {
+        try {
+            const res = await fetch('/api/locations');
+            locations = await res.json();
+        } catch (e) {
+            locations = ["Secunderabad", "Koti", "Mehdipatnam", "Charminar", "Ameerpet", "Hitech City", "Gachibowli", "Miyapur", "Uppal", "L.B. Nagar"];
+        }
+        setupAuto('origin-input', 'origin-suggestions');
+        setupAuto('dest-input', 'dest-suggestions');
+    }
 
     function setupAuto(inputId, sugId) {
         const i = document.getElementById(inputId);
         const s = document.getElementById(sugId);
         if (!i || !s) return;
+        let activeIdx = -1;
+
         i.addEventListener('input', function () {
-            const v = i.value.toLowerCase();
+            const v = i.value.toLowerCase().trim();
             s.innerHTML = '';
+            activeIdx = -1;
             if (v.length > 0) {
-                const f = locations.filter(l => l.toLowerCase().includes(v));
+                const sw = locations.filter(l => l.toLowerCase().startsWith(v));
+                const inc = locations.filter(l => !l.toLowerCase().startsWith(v) && l.toLowerCase().includes(v));
+                const f = [...sw, ...inc];
                 if (f.length > 0) {
                     s.style.display = 'block';
                     f.forEach(function (loc) {
                         const d = document.createElement('div');
                         d.className = 'suggestion-item';
-                        d.textContent = loc;
-                        d.onclick = function () { i.value = loc; s.style.display = 'none'; };
+                        const mIdx = loc.toLowerCase().indexOf(v);
+                        if (mIdx >= 0) {
+                            d.innerHTML = loc.substring(0, mIdx) +
+                                '<strong style="color: var(--accent);">' +
+                                loc.substring(mIdx, mIdx + v.length) +
+                                '</strong>' +
+                                loc.substring(mIdx + v.length);
+                        } else {
+                            d.textContent = loc;
+                        }
+                        d.onmousedown = function (e) { e.preventDefault(); i.value = loc; s.style.display = 'none'; };
                         s.appendChild(d);
                     });
                 } else s.style.display = 'none';
             } else s.style.display = 'none';
         });
+
+        i.addEventListener('keydown', function (e) {
+            const items = s.querySelectorAll('.suggestion-item');
+            if (!items.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeIdx = Math.min(activeIdx + 1, items.length - 1);
+                items.forEach((it, idx) => it.classList.toggle('suggestion-active', idx === activeIdx));
+                items[activeIdx].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIdx = Math.max(activeIdx - 1, 0);
+                items.forEach((it, idx) => it.classList.toggle('suggestion-active', idx === activeIdx));
+                items[activeIdx].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Enter' && activeIdx >= 0) {
+                e.preventDefault();
+                i.value = items[activeIdx].textContent;
+                s.style.display = 'none';
+            } else if (e.key === 'Escape') {
+                s.style.display = 'none';
+            }
+        });
+
+        i.addEventListener('blur', function () { setTimeout(() => { s.style.display = 'none'; }, 200); });
+        i.addEventListener('focus', function () { if (i.value.trim().length > 0) i.dispatchEvent(new Event('input')); });
     }
 
-    setupAuto('origin-input', 'origin-suggestions');
-    setupAuto('dest-input', 'dest-suggestions');
+    initAutocomplete();
 
     document.getElementById('predict-btn').addEventListener('click', async function () {
         const overlay = document.getElementById('loading-overlay');
