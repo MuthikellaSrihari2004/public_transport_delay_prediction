@@ -802,8 +802,10 @@
     // Reach time from backend
     const reachTimeStr = "{{ info.Reach_Time }}";
     const startTimeStr = "{{ info.Start_Time }}";
+```javascript
     const predictedDelay = {{ insights.predicted_delay or 0 }};
     const isLive = {{ 'true' if info.Is_Live else 'false' }};
+```
 
     function updateClock() {
         const now = new Date();
