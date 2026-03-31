@@ -8,11 +8,6 @@ requests
 joblib
 matplotlib
 seaborn
-jupyter
-ipykernel
-scipy
 xgboost
-lightgbm
-statsmodels
 jinja2
 sqlalchemy

@@ -1,8 +1,9 @@
 """
-HyderTrax - Hyderabad Public Transport Delay Prediction System
+src — Source code package for the HyderTrax system.
 
-This package contains all the source code for the transport delay prediction system.
+Sub-packages:
+  - data          : Data generation, cleaning, and feature engineering
+  - database      : SQLite database schema and queries
+  - models        : ML training, evaluation, and prediction engine
+  - visualization : EDA visualizations and reports
 """
-
-__version__ = "1.0.0"
-__author__ = "Transport Analytics Team"

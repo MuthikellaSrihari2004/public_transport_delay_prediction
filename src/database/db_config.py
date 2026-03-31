@@ -1,22 +1,27 @@
+"""
+db_config.py — Database Schema & Initialization
+==================================================
+Creates the SQLite database tables and indexes.
+"""
+
 import sqlite3
 import os
 import sys
 from pathlib import Path
 
-# Add project root to path to import config
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import config
 
+
 def init_db(db_path=None):
-    """Initialize the database schema and create necessary tables"""
-    target_path = db_path or str(config.DB_PATH)
-    os.makedirs(os.path.dirname(target_path), exist_ok=True)
-    
-    print(f"🗄️  Initializing database at {target_path}...")
-    conn = sqlite3.connect(target_path)
+    """Create database tables and indexes if they don't exist."""
+    target = db_path or str(config.DB_PATH)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+
+    conn = sqlite3.connect(target)
     cursor = conn.cursor()
-    
-    # Create Schedules Table (Snake Case)
+
+    # Schedules table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS schedules (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,12 +56,12 @@ def init_db(db_path=None):
         dep_hour INTEGER
     )
     ''')
-    
-    # Create Indexes for optimization
+
+    # Indexes for fast lookups
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_route ON schedules(from_location, to_location, transport_type, date)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_service_id ON schedules(service_id)')
-    
-    # Create Table for Predictions (Audit Log)
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_service ON schedules(service_id)')
+
+    # Predictions audit log
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS predictions (
         pred_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,10 +74,11 @@ def init_db(db_path=None):
         reason TEXT
     )
     ''')
-    
+
     conn.commit()
     conn.close()
-    print(f"✅ Database initialized successfully.")
+    print(f"Database initialized: {target}")
+
 
 if __name__ == "__main__":
     init_db()

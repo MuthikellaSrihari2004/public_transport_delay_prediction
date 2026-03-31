@@ -1,20 +1,34 @@
+"""
+make_dataset.py — Synthetic Data Generator
+============================================
+Generates realistic Hyderabad transport delay data with proper
+route networks, intermediate stops, and delay distributions.
+"""
+
 import pandas as pd
 import numpy as np
 import os
-from datetime import datetime, timedelta
+import sys
 import random
+from datetime import datetime, timedelta
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+import config
+
 
 def generate_hyderabad_data():
-    print("Initializing Enhanced Data Generation for Hyderabad Transport with Real Stop Names...")
-    
-    # Configuration
+    """Generate synthetic transport data for Hyderabad routes."""
+    print("Generating transport data for Hyderabad...")
+
+    # Hub locations
     hubs = [
         "Secunderabad", "Koti", "Mehdipatnam", "Charminar", "Ameerpet",
         "Hitech City", "Gachibowli", "Miyapur", "Uppal", "L.B. Nagar"
     ]
-    
-    # Pool of realistic Hyderabad intermediate stop names
-    intermediate_stop_pool = [
+
+    # Intermediate stops (realistic Hyderabad stop names)
+    stop_pool = [
         "Paradise", "Patny", "Tarnaka", "Habsiguda", "Mettuguda", "Begumpet",
         "Punjagutta", "Banjara Hills", "Jubilee Hills Checkpost", "Madhapur",
         "Kondapur", "Kothaguda", "Hafeezpet", "JNTU", "KPHB", "Erragadda",
@@ -27,145 +41,125 @@ def generate_hyderabad_data():
 
     transport_types = ["Bus", "Metro", "Train"]
     weather_types = ["Clear", "Rainy", "Foggy", "Overcast", "Cloudy"]
-    delay_reasons = ["Traffic Congestion", "Technical Glitch", "Weather Conditions", "Public Rally", "Signal Delay", "Accident"]
-    
-    # Optimized range (Q1 2026)
+    delay_reasons = ["Traffic Congestion", "Technical Glitch", "Weather Conditions",
+                     "Public Rally", "Signal Delay", "Accident"]
+
+    # Date range: Jan–Mar 2026
     start_date = datetime(2026, 1, 1)
     end_date = datetime(2026, 3, 31)
     date_list = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
-    
-    # Define Routes (Vice-versa)
+
+    # Holiday dates
+    holidays = {"2024-01-01", "2024-01-14", "2024-01-15", "2024-01-26", "2024-03-25",
+                "2024-04-11", "2024-08-15", "2024-10-02", "2024-11-01", "2024-12-25",
+                "2025-01-01", "2025-01-14", "2025-01-15", "2025-01-26",
+                "2025-08-15", "2025-10-02", "2025-12-25"}
+
+    # Build routes (both directions)
     routes = []
     for i in range(len(hubs)):
         for j in range(i + 1, len(hubs)):
-            from_loc = hubs[i]
-            to_loc = hubs[j]
-            
-            # Select 8 unique random stops from pool for this specific route
-            selected_stops = random.sample(intermediate_stop_pool, 8)
-            # Add start and end
-            full_stops_forward = [from_loc] + selected_stops + [to_loc]
-            full_stops_backward = full_stops_forward[::-1]
-            
+            stops = random.sample(stop_pool, 8)
+            forward = [hubs[i]] + stops + [hubs[j]]
+            backward = forward[::-1]
             dist = round(random.uniform(15.0, 45.0), 2)
-            
-            routes.append({'from': from_loc, 'to': to_loc, 'id': f"RT_{i}{j}", 'stops': "|".join(full_stops_forward), 'dist': dist})
-            routes.append({'from': to_loc, 'to': from_loc, 'id': f"RT_{j}{i}", 'stops': "|".join(full_stops_backward), 'dist': dist})
 
-    final_data = []
+            routes.append({'from': hubs[i], 'to': hubs[j], 'id': f"RT_{i}{j}",
+                           'stops': "|".join(forward), 'dist': dist})
+            routes.append({'from': hubs[j], 'to': hubs[i], 'id': f"RT_{j}{i}",
+                           'stops': "|".join(backward), 'dist': dist})
 
-    # Holiday list simulation
-    holidays = ["2024-01-01", "2024-01-14", "2024-01-15", "2024-01-26", "2024-03-25", "2024-04-11",
-                "2024-08-15", "2024-10-02", "2024-11-01", "2024-12-25",
-                "2025-01-01", "2025-01-14", "2025-01-15", "2025-01-26", "2025-08-15", "2025-10-02", "2025-12-25"]
+    # Generate records
+    records = []
+    speed_map = {"Bus": 25, "Metro": 40, "Train": 50}
 
-    # We will iterate by Transport Type first as requested
     for t_type in transport_types:
-        print(f"Generating data for {t_type}...")
-        for current_date in date_list:
-            date_str = current_date.strftime('%Y-%m-%d')
-            is_holiday = 1 if date_str in holidays or current_date.weekday() >= 5 else 0
-            
-            # Daily environmental factors
-            daily_weather = random.choice(weather_types)
+        print(f"  Generating {t_type} data...")
+        for date in date_list:
+            date_str = date.strftime('%Y-%m-%d')
+            is_holiday = 1 if date_str in holidays or date.weekday() >= 5 else 0
+            weather = random.choice(weather_types)
             temp = round(random.uniform(20.0, 42.0), 1)
             humidity = random.randint(30, 90)
             is_event = 1 if random.random() < 0.08 else 0
 
             for route in routes:
-                # 30-minute interval from 05:00 to 23:30 (approx 38 services)
-                for s_idx in range(38):
-                    start_minutes = 300 + (s_idx * 30)
-                    sched_dep_dt = current_date + timedelta(minutes=start_minutes)
-                    
-                    if sched_dep_dt.hour >= 24 or (sched_dep_dt.day != current_date.day): 
+                for slot in range(38):  # 05:00–23:30 in 30-min slots
+                    dep_dt = date + timedelta(minutes=300 + slot * 30)
+                    if dep_dt.day != date.day:
                         continue
 
-                    hour = sched_dep_dt.hour
-                    is_peak = 1 if (8 <= hour <= 11) or (17 <= hour <= 20) else 0
-                    
-                    # Traffic & Delay Logic
-                    traffic_density = "Low"
+                    hour = dep_dt.hour
+                    is_peak = 1 if (8 <= hour <= 11 or 17 <= hour <= 20) else 0
+
+                    # Traffic density
                     if is_peak:
-                        traffic_density = random.choice(["High", "High", "Medium"])
+                        traffic = random.choice(["High", "High", "Medium"])
                     elif is_holiday:
-                        traffic_density = "Low"
+                        traffic = "Low"
                     else:
-                        traffic_density = random.choice(["Low", "Medium"])
+                        traffic = random.choice(["Low", "Medium"])
 
-                    # Speed: Bus 25km/h, Metro 40km/h, Train 50km/h
-                    avg_speed = 25 if t_type == "Bus" else 40 if t_type == "Metro" else 50
-                    duration_mins = int((route['dist'] / avg_speed) * 60)
-                    sched_arr_dt = sched_dep_dt + timedelta(minutes=duration_mins)
+                    # Duration and arrival
+                    duration = int((route['dist'] / speed_map[t_type]) * 60)
+                    arr_dt = dep_dt + timedelta(minutes=duration)
 
-                    # Target distribution: 25% On-time, 55% Minor, 20% Major
-                    rand_p = random.random()
-                    delay = 0
-                    reason = "None"
-                    
-                    if rand_p < 0.25: # On-time
-                        delay = 0
-                    elif rand_p < 0.80: # Minor (1-15 mins)
+                    # Delay generation (25% on-time, 55% minor, 20% major)
+                    rand_val = random.random()
+                    if rand_val < 0.25:
+                        delay, reason = 0, "None"
+                    elif rand_val < 0.80:
                         delay = random.randint(1, 15)
                         reason = random.choice(delay_reasons)
-                    else: # Major (15-120 mins)
-                        if is_peak or daily_weather == "Rainy" or is_event:
-                            delay = random.randint(30, 120)
-                        else:
-                            delay = random.randint(16, 45)
+                    else:
+                        delay = random.randint(30, 120) if (is_peak or weather == "Rainy" or is_event) else random.randint(16, 45)
                         reason = random.choice(delay_reasons)
 
-                    # Probability of Missing Values (NULL/None) - ~2%
-                    act_dep_dt = sched_dep_dt + timedelta(minutes=random.randint(-2, 5))
-                    act_arr_dt = sched_arr_dt + timedelta(minutes=delay)
-                    
-                    # Formatting strings with potential nulls
-                    act_dep_str = act_dep_dt.strftime('%H:%M')
-                    act_arr_str = act_arr_dt.strftime('%H:%M')
-                    weather_val = daily_weather
-                    reason_val = reason
+                    # Actual times (with small variance)
+                    act_dep = (dep_dt + timedelta(minutes=random.randint(-2, 5))).strftime('%H:%M')
+                    act_arr = (arr_dt + timedelta(minutes=delay)).strftime('%H:%M')
 
-                    if random.random() < 0.02: act_dep_str = None
-                    if random.random() < 0.02: act_arr_str = ""
-                    if random.random() < 0.05: reason_val = np.nan
-                    if random.random() < 0.01: weather_val = None
+                    # Introduce ~2% missing values
+                    if random.random() < 0.02: act_dep = None
+                    if random.random() < 0.02: act_arr = ""
+                    if random.random() < 0.05: reason = np.nan
+                    if random.random() < 0.01: weather = None
 
-                    passenger_load = random.randint(40, 100) if is_peak else random.randint(10, 60)
+                    load = random.randint(40, 100) if is_peak else random.randint(10, 60)
 
-                    final_data.append({
+                    records.append({
                         'Date': date_str,
                         'Transport_Type': t_type,
                         'Route_ID': f"{t_type[0]}_{route['id']}",
-                        'Service_ID': f"SVC_{t_type[0]}_{route['id']}_{s_idx:02d}",
+                        'Service_ID': f"SVC_{t_type[0]}_{route['id']}_{slot:02d}",
                         'From_Location': route['from'],
                         'To_Location': route['to'],
                         'Stops': route['stops'],
-                        'Scheduled_Departure': sched_dep_dt.strftime('%H:%M'),
-                        'Scheduled_Arrival': sched_arr_dt.strftime('%H:%M'),
-                        'Actual_Departure': act_dep_str,
-                        'Actual_Arrival': act_arr_str,
+                        'Scheduled_Departure': dep_dt.strftime('%H:%M'),
+                        'Scheduled_Arrival': arr_dt.strftime('%H:%M'),
+                        'Actual_Departure': act_dep,
+                        'Actual_Arrival': act_arr,
                         'Delay_Minutes': delay,
-                        'Delay_Reason': reason_val,
-                        'Weather': weather_val,
+                        'Delay_Reason': reason,
+                        'Weather': weather,
                         'Is_Holiday': is_holiday,
                         'Is_Peak_Hour': is_peak,
                         'Event_Scheduled': is_event,
-                        'Traffic_Density': traffic_density,
+                        'Traffic_Density': traffic,
                         'Temperature_C': temp,
                         'Humidity_Pct': humidity,
-                        'Passenger_Load': passenger_load,
+                        'Passenger_Load': load,
                         'Distance_KM': route['dist']
                     })
 
-    df = pd.DataFrame(final_data)
-    os.makedirs('data/raw', exist_ok=True)
-    output_file = 'data/raw/hyderabad_transport_raw.csv'
-    df.to_csv(output_file, index=False)
-    
-    print(f"Dataset generated with {len(df)} rows.")
-    print(f"Saved to: {output_file}")
-    print("\nSample Stops Check:")
-    print(df['Stops'].iloc[0])
+    df = pd.DataFrame(records)
+    output_path = str(config.RAW_DATA_FILE)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    df.to_csv(output_path, index=False)
+
+    print(f"Generated {len(df):,} records -> {output_path}")
+    return df
+
 
 if __name__ == "__main__":
     generate_hyderabad_data()

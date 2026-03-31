@@ -1,199 +1,183 @@
+"""
+predict_terminal.py — CLI Prediction Interface
+================================================
+Interactive terminal UI for searching routes and viewing predictions.
+"""
+
 import sys
 import os
-import random
+import pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Add project root to path to import config
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import config
 from src.models.engine import ENGINE
 from src.database.queries import TransportDB
 
+
 def run_interactive():
-    print("\n--- DEBUG: STARTING INTERACTIVE SESSION ---")
-    # Ensure artifacts are ready
+    """Run one interactive prediction session."""
     if not config.XGBOOST_MODEL_PATH.exists():
-        print("❌ Error: ML Model not found. Please run 'python main.py' first.")
+        print("Error: ML Model not found. Run 'python main.py' first.")
         return
 
     db = TransportDB()
-    print("\n" + "═"*70)
-    print("🚀 HYDERTRAX: ELITE TRANSIT ANALYTICS (CLI VERSION)")
-    print("═"*70)
-    
-    # User Inputs
+
+    print(f"\n{'='*60}")
+    print("  HYDERTRAX — Terminal Prediction")
+    print(f"{'='*60}")
+
+    # User inputs
     try:
-        origin = input("📍 From (e.g. Secunderabad): ").strip().title()
-        dest = input("📍 To   (e.g. Miyapur):      ").strip().title()
-        
-        date_input = input("📅 Date (YYYY-MM-DD) [Enter for Today]: ").strip()
+        origin = input("From (e.g. Secunderabad): ").strip().title()
+        dest = input("To   (e.g. Miyapur):      ").strip().title()
+
+        date_input = input("Date (YYYY-MM-DD) [today]: ").strip()
         try:
             if date_input:
-                datetime.strptime(date_input, '%Y-%m-%d') # Validate format
+                datetime.strptime(date_input, '%Y-%m-%d')
                 date_str = date_input
             else:
-                raise ValueError("Empty input")
+                raise ValueError
         except ValueError:
             date_str = config.get_now_ist().strftime("%Y-%m-%d")
             if date_input:
-                print(f"⚠️ Invalid format '{date_input}'. Using today: {date_str}")
-            
-        t_mode = input("🚌 Mode (Bus/Metro/Train/All) [All]: ").strip().lower()
-        if not t_mode or t_mode == 'all':
-            t_type = 'All'
-        else:
-            t_type = t_mode.title()
+                print(f"  Invalid format. Using today: {date_str}")
+
+        t_mode = input("Mode (Bus/Metro/Train/All) [All]: ").strip().lower()
+        t_type = t_mode.title() if t_mode and t_mode != 'all' else 'All'
     except KeyboardInterrupt:
-        print("\n👋 Exiting...")
+        print("\nExiting...")
         return
 
-    print(f"\n🔎 Scanning neural pathways for {date_str}...", flush=True)
-    
-    # Date Logic
-    # Pass requested date directly
-    mapped_date = date_str
+    print(f"\nSearching for {date_str}...")
 
-    print(f"📡 Status: Fetching scheduling threads from vault...", flush=True)
-
-    # Query Database
+    # Query database
     if t_type == 'All':
-        # Fetch for all common modes
         dfs = []
         for m in ['Bus', 'Metro', 'Train']:
-            df = db.get_schedules_by_route(origin, dest, m, mapped_date)
+            df = db.get_schedules_by_route(origin, dest, m, date_str)
             if not df.empty:
                 dfs.append(df)
         schedules_df = pd.concat(dfs) if dfs else pd.DataFrame()
     else:
-        schedules_df = db.get_schedules_by_route(origin, dest, t_type, mapped_date)
-    
+        schedules_df = db.get_schedules_by_route(origin, dest, t_type, date_str)
+
     if schedules_df.empty:
-        print(f"\n❌ No matching {t_type} services found for {origin} -> {dest} on {date_str}.")
-        # Show some available locations to help the user
+        print(f"\nNo {t_type} services found for {origin} -> {dest} on {date_str}.")
         try:
             locs = db.get_locations()
             if locs:
-                print(f"💡 Available locations ({len(locs)}): {', '.join(locs[:10])}...")
-        except:
+                print(f"Available locations: {', '.join(locs[:10])}...")
+        except Exception:
             pass
         return
 
-    print(f"🧠 Status: Running ML Inference on {len(schedules_df)} threads...", flush=True)
-
-    # Process Batch logic
+    # Run predictions
+    print(f"Running predictions on {len(schedules_df)} services...")
     try:
-        schedules_raw = schedules_df.to_dict('records')
-        processed_schedules = ENGINE.process_batch(schedules_raw, date_str)
+        processed = ENGINE.process_batch(schedules_df.to_dict('records'), date_str)
     except Exception as e:
-        print(f"❌ AI Engine Error: {e}")
+        print(f"Prediction error: {e}")
         return
 
-    print(f"\n📋 FOUND {len(processed_schedules)} SERVICES:")
-    print(f"{'IDX':<5} | {'MODE':<8} | {'SERVICE ID':<18} | {'DEP TIME':<10} | {'PREDICTED ARRIVAL'}")
-    print("-" * 80)
-    
-    for i, svc in enumerate(processed_schedules):
+    # Display results
+    print(f"\n{'IDX':<5} | {'MODE':<8} | {'SERVICE ID':<18} | {'DEP':<8} | {'PREDICTED ARR'}")
+    print("-" * 70)
+    for i, svc in enumerate(processed):
         pred = svc['prediction']
-        print(f"{i+1:<5} | {svc.get('Transport_Type', 'UNK'):<8} | {svc.get('Service_ID', 'UNK'):<18} | {svc.get('Scheduled_Departure', '--:--'):<10} | {pred['predicted_arrival']}")
-        
+        print(f"{i+1:<5} | {svc.get('Transport_Type', '?'):<8} | "
+              f"{svc.get('Service_ID', '?'):<18} | "
+              f"{svc.get('Scheduled_Departure', '--:--'):<8} | "
+              f"{pred['predicted_arrival']}")
+
+    # Select service for detail
     try:
-        user_choice = input("\n🔢 Index to Track (or Enter to quit): ").strip()
-        if not user_choice: return
-        sel_idx = int(user_choice) - 1
-        if sel_idx < 0 or sel_idx >= len(processed_schedules):
-            print("❌ Invalid selection.")
+        choice = input("\nIndex to view details (or Enter to quit): ").strip()
+        if not choice:
             return
-    except ValueError:
-        print("👋 Returning to main menu...")
+        idx = int(choice) - 1
+        if idx < 0 or idx >= len(processed):
+            print("Invalid selection.")
+            return
+    except (ValueError, KeyboardInterrupt):
         return
-    except Exception as e:
-        print(f"❌ Selection error: {e}")
-        return
-        
-    selected_service = processed_schedules[sel_idx]
-    result = selected_service['prediction']
-    
-    print(f"\n⚡ Synchronizing telemetry for {selected_service.get('Service_ID')}...")
-    
-    sch_dep = selected_service.get('Scheduled_Departure')
+
+    selected = processed[idx]
+    result = selected['prediction']
+
+    # Detail view
+    sch_dep = selected.get('Scheduled_Departure', '--:--')
     try:
-        dep_time_obj = datetime.strptime(f"{date_str} {sch_dep}", "%Y-%m-%d %H:%M")
-    except:
-        dep_time_obj = datetime.now()
-    # Timeline details - Synchronize with Engine
-    sch_arr = result.get('scheduled_arrival')
+        dep_dt = datetime.strptime(f"{date_str} {sch_dep}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        dep_dt = datetime.now()
+
+    sch_arr = result.get('scheduled_arrival', '--:--')
     try:
         arr_dt = datetime.strptime(f"{date_str} {sch_arr}", "%Y-%m-%d %H:%M")
-        base_dur = int((arr_dt - dep_time_obj).total_seconds() / 60)
-    except:
-        dist = selected_service.get('Distance_KM', config.DEFAULT_DISTANCE_KM)
-        mode_for_spd = selected_service.get('Transport_Type', 'Bus')
-        spd = config.SPEED_ESTIMATES.get(mode_for_spd, 30)
+        base_dur = int((arr_dt - dep_dt).total_seconds() / 60)
+    except (ValueError, TypeError):
+        dist = selected.get('Distance_KM', config.DEFAULT_DISTANCE_KM)
+        spd = config.SPEED_ESTIMATES.get(selected.get('Transport_Type', 'Bus'), 30)
         base_dur = int((dist / spd) * 60)
-    
-    print("\n" + "═"*70)
-    print(f"🎯 JOURNEY INSIGHTS")
-    print("═"*70)
-    print(f"🚦 Predicted Status:   {result.get('status_text', 'UNKNOWN')}")
-    print(f"🔮 Estimated Delay:   +{result.get('predicted_delay', 0)} Min")
-    print(f"📝 Contributing Factor: {result.get('reason', 'N/A')}")
-    print(f"📡 Risk Level:         {result.get('risk_level', 'Unknown')}")
-    print(f"💡 Recommendation:     {result.get('recommendation', 'N/A')}")
-    print("-" * 70)
-    print(f"🕒 Scheduled Dep:      {sch_dep}")
-    print(f"🕒 Scheduled Arr:      {result.get('scheduled_arrival', '--:--')}")
-    print(f"🕒 Predicted Arr:      {result.get('predicted_arrival', '--:--')}")
-    print("═"*70)
-    
-    # Live Stop Tracking
+
+    print(f"\n{'='*60}")
+    print(f"  JOURNEY INSIGHTS — {selected.get('Service_ID')}")
+    print(f"{'='*60}")
+    print(f"Status           : {result.get('status_text')}")
+    print(f"Predicted Delay  : +{result.get('predicted_delay', 0)} min")
+    print(f"Delay Reason     : {result.get('reason', 'N/A')}")
+    print(f"Risk Level       : {result.get('risk_level')}")
+    print(f"Recommendation   : {result.get('recommendation')}")
+    print(f"-" * 60)
+    print(f"Scheduled Dep    : {sch_dep}")
+    print(f"Scheduled Arr    : {result.get('scheduled_arrival')}")
+    print(f"Predicted Arr    : {result.get('predicted_arrival')}")
+    print(f"{'='*60}")
+
+    # Stop tracking
     now = config.get_now_ist()
-    stops_raw = selected_service.get('Stops', '').split('|')
+    stops = selected.get('Stops', '').split('|')
     total_time = base_dur + result.get('predicted_delay', 0)
-    time_per_stop = total_time / max(1, (len(stops_raw) - 1))
-    
-    print(f"\n📍 NODE TRACKING (System IST: {now.strftime('%H:%M:%S')})")
-    print(f"{'STATION NAME':<25} | {'EST. TIME':<10} | {'TELEMETRY STATUS'}")
-    print("-" * 70)
-    
-    found_current = False
+    time_per_stop = total_time / max(1, len(stops) - 1)
+
     is_today = (date_str == now.strftime("%Y-%m-%d"))
-    
-    for i, stop in enumerate(stops_raw):
-        stop_time = dep_time_obj + timedelta(minutes=int(i * time_per_stop))
-        stop_str = stop_time.strftime('%H:%M')
-        
-        status = "○ UPCOMING"
-        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        is_past = target_date < now.date()
-        is_future = target_date > now.date()  
-          
+    target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    is_past = target_date < now.date()
+    is_future = target_date > now.date()
+
+    print(f"\nStop Tracking ({now.strftime('%H:%M:%S')} IST)")
+    print(f"{'STOP':<25} | {'EST TIME':<10} | {'STATUS'}")
+    print("-" * 55)
+
+    for i, stop in enumerate(stops):
+        stop_time = dep_dt + timedelta(minutes=int(i * time_per_stop))
+
         if is_past:
-             status = "✓ DEPARTED"
-             if i == len(stops_raw) - 1:
-                 status = "🏁 REACHED"
+            status = "REACHED" if i == len(stops) - 1 else "DEPARTED"
         elif is_future:
-             status = "○ UPCOMING"
+            status = "UPCOMING"
         elif is_today:
             if now > stop_time + timedelta(minutes=2):
-                status = "✓ PASSED"
+                status = "PASSED"
             elif now >= stop_time - timedelta(minutes=2):
-                status = "● AT STATION"
-                found_current = True
-            elif not found_current and i > 0:
-                prev_stop_time = dep_time_obj + timedelta(minutes=int((i-1) * time_per_stop))
-                if now > prev_stop_time:
-                    status = "▶ IN TRANSIT"
-                    found_current = True
-            
-        print(f"{stop:<25} | {stop_str:<10} | {status}")
+                status = "AT STATION"
+            else:
+                status = "UPCOMING"
+        else:
+            status = "UPCOMING"
+
+        print(f"{stop:<25} | {stop_time.strftime('%H:%M'):<10} | {status}")
+
 
 if __name__ == "__main__":
     while True:
         try:
             run_interactive()
-            cont = input("\n🔄 Analyze another route? (y/n) [n]: ").lower().strip()
-            if cont != 'y': break
+            if input("\nAnother route? (y/n) [n]: ").lower().strip() != 'y':
+                break
         except KeyboardInterrupt:
             break
-    print("\n👋 System disconnected. Travel safe!")
+    print("\nGoodbye!")

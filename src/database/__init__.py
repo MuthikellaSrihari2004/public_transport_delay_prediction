@@ -1,7 +1,7 @@
 """
 Database module
 
-Handles database initialization, migrations, and queries.
+Handles database initialization and queries.
 """
 
 from .db_config import init_db

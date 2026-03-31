@@ -16,10 +16,11 @@ HyderTrax is a comprehensive data-driven machine learning solution that predicts
 - ✅ **Real-time Delay Predictions** - Get instant predictions for any route
 - ✅ **Multi-modal Transport** - Supports Bus, Metro, and Train services
 - ✅ **Live Tracking** - Track services with stop-by-stop ETA updates
-- ✅ **Weather Integration** - Real-time weather data from OpenWeather API
-- ✅ **Historical Analysis** - Comprehensive EDA and visualization reports
+- ✅ **Weather Integration** - Real-time weather data from Open-Meteo API
+- ✅ **Exploratory Data Analysis** - 12+ EDA visualizations with auto-generated insights report
+- ✅ **Interactive Map** - Live route map with autocomplete location search
 - ✅ **RESTful API** - JSON API for third-party integrations
-- ✅ **Modern Web UI** - Responsive, user-friendly interface
+- ✅ **Modern Web UI** - Responsive, premium interface
 
 ---
 
@@ -28,8 +29,9 @@ HyderTrax is a comprehensive data-driven machine learning solution that predicts
 ```
 project/
 ├── config.py                    # Centralized configuration
-├── main.py                      # Main pipeline orchestrator
+├── main.py                      # Main pipeline orchestrator (7-step)
 ├── app.py                       # Flask web application
+├── create_deploy_db.py          # Deployment database builder
 │
 ├── src/                         # Source code
 │   ├── data/                    # Data pipeline
@@ -39,40 +41,47 @@ project/
 │   │
 │   ├── database/                # Database layer
 │   │   ├── db_config.py        # Schema & initialization
-│   │   ├── queries.py          # Query utilities
-│   │   └── migrate_data.py     # CSV to DB migration
+│   │   └── queries.py          # Query utilities
 │   │
 │   ├── models/                  # ML models
-│   │   ├── engine.py           # Prediction engine
-│   │   ├── train_model.py      # Model training
+│   │   ├── engine.py           # Prediction engine (core)
+│   │   ├── train_model.py      # Model training & comparison
 │   │   ├── evaluate_model.py   # Model evaluation
+│   │   ├── tune_model.py       # Hyperparameter tuning
+│   │   ├── cross_validate.py   # Cross-validation
 │   │   └── predict_terminal.py # CLI predictions
 │   │
 │   └── visualization/           # Data visualization
-│       └── eda.py              # Exploratory data analysis
+│       └── eda.py              # Comprehensive EDA (12 plots + report)
 │
 ├── data/                        # Data storage
 │   ├── raw/                    # Raw generated data
-│   ├── processed/              # Cleaned & engineered data
-│   └── transport.db           # SQLite database
+│   ├── processed/              # Cleaned & feature-engineered data
+│   └── transport.db            # SQLite deployment database
 │
 ├── models/                      # Trained ML models
 │   ├── xgboost_delay_model.pkl
+│   ├── xgboost_tuned_model.pkl
 │   └── label_encoders.pkl
 │
 ├── templates/                   # HTML templates
-│   ├── base.html
-│   ├── index.html
-│   ├── prediction.html
-│   └── schedule.html
+│   ├── base.html               # Base layout
+│   ├── index.html              # Homepage + search results
+│   ├── prediction.html         # Prediction page
+│   ├── schedule.html           # Service tracking page
+│   ├── map.html                # Interactive route map
+│   └── analytics.html          # Analytics dashboard
 │
-├── static/                      # Static assets
-│   └── css/
-│       └── style.css
+├── static/css/style.css         # Stylesheet
 │
-└── reports/                     # Generated reports
-    ├── figures/                # EDA visualizations
-    └── eda_insights.md        # Analysis report
+├── reports/                     # Generated reports
+│   ├── figures/                # EDA visualizations (12 PNG files)
+│   └── eda_insights.md         # Auto-generated analysis report
+│
+└── documents/                   # Project documents
+    ├── Research_Paper.pdf
+    ├── project report.pdf
+    └── project presentation.pptx
 ```
 
 ---
@@ -83,21 +92,15 @@ project/
 
 - Python 3.8 or higher
 - pip package manager
-- (Optional) OpenWeather API key for real-time weather
 
 ### Installation
 
-1. **Clone the repository** (or navigate to project directory)
-   ```bash
-   cd c:\Users\msrih\Documents\project
-   ```
-
-2. **Create a virtual environment**
+1. **Create a virtual environment**
    ```bash
    python -m venv venv
    ```
 
-3. **Activate the virtual environment**
+2. **Activate the virtual environment**
    - Windows:
      ```bash
      venv\Scripts\activate
@@ -107,20 +110,12 @@ project/
      source venv/bin/activate
      ```
 
-4. **Install dependencies**
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-5. **Configure environment**
-   - The `.env` file already exists with default values
-   - (Optional) Add your OpenWeather API key:
-     ```bash
-     # Edit .env file
-     OPENWEATHER_API_KEY=your_actual_api_key_here
-     ```
-
-6. **Run the complete pipeline**
+4. **Run the complete pipeline**
    ```bash
    python main.py
    ```
@@ -128,51 +123,78 @@ project/
    - Generate synthetic transport data
    - Clean and process the data
    - Engineer features
-   - Train the ML model
-   - Initialize the database
-   - Migrate data to database
+   - **Run Exploratory Data Analysis (EDA)**
+   - Train & compare ML models
+   - Evaluate model performance
+   - Create deployment database
 
-7. **Start the web application**
+5. **Start the web application**
    ```bash
    python app.py
    ```
 
-8. **Open your browser**
+6. **Open your browser**
    Navigate to: http://localhost:8000
 
 ---
 
-## 📖 Usage
+## 📊 Data Pipeline (7 Steps)
 
-### Running the Complete Pipeline
-
-```bash
-# Run entire pipeline
-python main.py
-
-# Force regenerate all data and models
-python main.py --force
-
-# Skip specific steps
-python main.py --skip-data          # Skip data generation
-python main.py --skip-training      # Skip model training
-
-# Run only database operations
-python main.py --only-database
+```
+Step 1: Data Generation         → src/data/make_dataset.py
+   ↓
+Step 2: Data Cleaning           → src/data/clean_data.py
+   ↓
+Step 3: Feature Engineering     → src/data/build_features.py
+   ↓
+Step 4: EDA & Visualization     → src/visualization/eda.py
+   ↓
+Step 5: Model Training          → src/models/train_model.py
+   ↓
+Step 6: Model Evaluation        → src/models/evaluate_model.py
+   ↓
+Step 7: Deployment DB           → create_deploy_db.py
+   ↓
+        Web Application         → app.py
 ```
 
-### Starting the Web Application
+---
+
+## 📊 Exploratory Data Analysis (EDA)
+
+The EDA module (`src/visualization/eda.py`) performs comprehensive analysis:
+
+### Visualizations Generated (12 figures)
+
+| # | Figure | Description |
+|---|--------|-------------|
+| 1 | `01_delay_distribution.png` | Histogram + KDE + Box plot of delays |
+| 2 | `02_delay_by_transport.png` | Box + Violin plots by transport type |
+| 3 | `03_peak_hour_impact.png` | Peak vs off-peak hour comparison |
+| 4 | `04_weather_impact.png` | Average delay by weather condition |
+| 5 | `05_traffic_impact.png` | Violin plot by traffic density |
+| 6 | `06_correlation_heatmap.png` | Feature correlation matrix |
+| 7 | `07_hourly_delay_pattern.png` | Hour-of-day delay analysis |
+| 8 | `08_day_of_week.png` | Day-of-week delay comparison |
+| 9 | `09_holiday_impact.png` | Holiday vs non-holiday analysis |
+| 10 | `10_top_delayed_routes.png` | Top 10 most delayed routes |
+| 11 | `11_delay_categories.png` | Pie chart of delay categories |
+| 12 | `12_passenger_vs_delay.png` | Passenger load vs delay scatter |
+
+### Auto-Generated Report
+
+After EDA runs, a detailed markdown report is saved to `reports/eda_insights.md` with:
+- Dataset overview statistics
+- Target variable analysis (mean, median, skewness, kurtosis)
+- Delay category distribution
+- Transport type breakdown
+- Peak hour, weather, traffic, and holiday impact analysis
+- Top correlated features
+
+### Running EDA Standalone
 
 ```bash
-python app.py
-```
-
-The application will start on `http://localhost:8000`
-
-### Using the CLI Prediction Tool
-
-```bash
-python src/models/predict_terminal.py
+python src/visualization/eda.py
 ```
 
 ---
@@ -181,107 +203,23 @@ python src/models/predict_terminal.py
 
 ### Pages
 
-1. **Homepage (`/`)**
-   - Search form for route-based predictions
-   - Displays all available services with delay predictions
-   - Shows real-time weather and environmental context
-
-2. **Prediction Page (`/predict`)**
-   - Interactive prediction form
-   - JSON API-powered results
-   - Detailed delay insights
-
-3. **Tracking Page (`/track/<service_id>`)**
-   - Live service tracking
-   - Stop-by-stop timeline
-   - Real-time ETA updates
+1. **Homepage (`/`)** - Route search with delay predictions
+2. **Prediction Page (`/predict`)** - Interactive prediction form
+3. **Tracking Page (`/track/<id>`)** - Live service tracking with stop timeline
+4. **Map Page (`/map`)** - Interactive route map with autocomplete
+5. **Analytics (`/analytics`)** - Analytics dashboard
 
 ---
 
 ## 🔌 API Endpoints
 
-### 1. Search Services (Form-based)
-
-**Endpoint:** `POST /search`  
-**Content-Type:** `application/x-www-form-urlencoded`
-
-**Request:**
-```
-from_location=Secunderabad
-to_location=Hitech City
-travel_date=2026-01-26
-transport_type=Bus
-```
-
-**Response:** HTML page with results
-
----
-
-### 2. Search Services (JSON API)
-
-**Endpoint:** `POST /api/search`  
-**Content-Type:** `application/json`
-
-**Request:**
-```json
-{
-  "from": "Secunderabad",
-  "to": "Hitech City",
-  "date": "2026-01-26",
-  "type": "Metro"
-}
-```
-
-**Response:**
-```json
-{
-  "schedules": [
-    {
-      "Service_ID": "METRO_001",
-      "Scheduled_Departure": "09:00",
-      "id": 1
-    }
-  ],
-  "representative_insight": {
-    "predicted_delay": 12,
-    "delay_category": "Minor Delay",
-    "confidence_score": 0.85,
-    "primary_reason": "Heavy traffic conditions"
-  }
-}
-```
-
----
-
-### 3. Track Service (JSON API)
-
-**Endpoint:** `GET /api/track/<service_id>?date=2026-01-26`
-
-**Response:**
-```json
-{
-  "service": { ... },
-  "info": {
-    "Service_ID": "BUS_042",
-    "Start_Time": "09:02",
-    "Reach_Time": "10:25"
-  },
-  "insights": {
-    "predicted_delay": 15,
-    "delay_category": "Minor Delay",
-    "primary_reason": "Peak hour traffic"
-  },
-  "stops": [
-    {
-      "name": "Secunderabad",
-      "est": "09:02",
-      "sched": "09:00",
-      "status": "Departed",
-      "is_current": false
-    }
-  ]
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/search` | Search services (form-based, returns HTML) |
+| `POST` | `/api/search` | Search services (JSON API) |
+| `GET` | `/api/track/<id>` | Track a service (JSON) |
+| `POST` | `/api/route` | Get route details (JSON) |
+| `GET` | `/api/locations` | Get all locations for autocomplete |
 
 ---
 
@@ -289,75 +227,18 @@ transport_type=Bus
 
 ### Model Architecture
 
-- **Algorithm:** XGBoost Regressor
+- **Algorithm:** XGBoost Regressor (selected via comparison with Linear Regression and Decision Tree)
 - **Target Variable:** Delay (in minutes)
-- **Features:** 15+ features including transport type, route, weather, traffic, temporal patterns
+- **Features:** 17 features including transport type, route, weather, traffic, temporal patterns
 
 ### Features Used
 
-**Categorical:**
-- Transport Type (Bus, Metro, Train)
-- From/To Locations
-- Weather Condition
-- Traffic Density
-
-**Numerical:**
-- Temperature (°C)
-- Humidity (%)
-- Passenger Load
-- Distance (km)
-- Hour of Day
-- Day of Week
-
-**Engineered:**
-- Weather-Traffic Interaction Index
-- Is Weekend
-- Is Peak Hour
-
-### Performance Metrics
-
-See `reports/` directory after running evaluation.
-
----
-
-## 🗄️ Database Schema
-
-### Tables
-
-#### `schedules`
-Stores all transport schedules with contextual information
-
-```sql
-CREATE TABLE schedules (
-    id INTEGER PRIMARY KEY,
-    date TEXT,
-    transport_type TEXT,
-    from_location TEXT,
-    to_location TEXT,
-    scheduled_departure TEXT,
-    delay_minutes INTEGER,
-    weather TEXT,
-    temperature_c REAL,
-    is_holiday INTEGER,
-    is_peak_hour INTEGER,
-    traffic_density TEXT,
-    -- ... and more
-);
-```
-
-#### `predictions`
-Audit log of all predictions made
-
-```sql
-CREATE TABLE predictions (
-    pred_id INTEGER PRIMARY KEY,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    from_location TEXT,
-    to_location TEXT,
-    predicted_delay INTEGER,
-    reason TEXT
-);
-```
+| Category | Features |
+|----------|----------|
+| **Categorical** | Transport_Type, From/To_Location, Weather, Traffic_Density |
+| **Numerical** | Temperature_C, Humidity_Pct, Passenger_Load, Distance_KM, Dep_Hour, Day_of_Week |
+| **Engineered** | Weather_Traffic_Index, Is_Weekend, Is_Peak_Hour, Month |
+| **Binary Flags** | Is_Holiday, Event_Scheduled |
 
 ---
 
@@ -366,117 +247,39 @@ CREATE TABLE predictions (
 All configuration is centralized in `config.py`:
 
 - **Paths:** Data directories, model paths, database location
-- **API Keys:** OpenWeather, Traffic APIs
-- **Model Parameters:** Training hyperparameters
+- **API Keys:** Weather, Traffic, Event APIs (optional)
+- **Model Parameters:** XGBoost hyperparameters
 - **Flask Settings:** Debug mode, port, host
-
----
-
-## 🔧 Development
-
-### Running Tests
-
-```bash
-# Create tests directory if it doesn't exist
-mkdir tests
-
-# Run tests (when available)
-pytest tests/
-```
-
-### Viewing Logs
-
-Logs are stored in `logs/hydertrax.log`
-
----
-
-## 📊 Data Pipeline
-
-```
-1. Data Generation (make_dataset.py)
-   ↓
-2. Data Cleaning (clean_data.py)
-   ↓
-3. Feature Engineering (build_features.py)
-   ↓
-4. Model Training (train_model.py)
-   ↓
-5. Model Evaluation (evaluate_model.py)
-   ↓
-6. Database Setup (db_config.py)
-   ↓
-7. Data Migration (migrate_data.py)
-   ↓
-8. Web Application (app.py)
-```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Issue: ModuleNotFoundError
-
-**Solution:** Ensure you're in the project root and virtual environment is activated
-```bash
-cd c:\Users\msrih\Documents\project
-venv\Scripts\activate
-python -m pip install -r requirements.txt
-```
-
-### Issue: Database not found
-
-**Solution:** Run the pipeline to initialize
-```bash
-python main.py --only-database
-```
-
-### Issue: Model file not found
-
-**Solution:** Train the model
-```bash
-python main.py --skip-data --skip-cleaning --skip-features
-```
-
-### Issue: API key warnings
-
-**Solution:** Add your OpenWeather API key to `.env`
-```
-OPENWEATHER_API_KEY=your_key_here
-```
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License.
-
----
-
-## 👥 Contributors
-
-- Transport Analytics Team
-
----
-
-## 📧 Support
-
-For issues and questions, please check:
-1. `PROJECT_ANALYSIS.md` - Detailed architecture analysis
-2. `IMPLEMENTATION_PLAN.md` - Development roadmap
+| Issue | Solution |
+|-------|----------|
+| `ModuleNotFoundError` | Activate venv and `pip install -r requirements.txt` |
+| Database not found | Run `python main.py` to initialize |
+| Model file not found | Run `python main.py` to train |
+| Weather data unavailable | System uses simulated fallback automatically |
 
 ---
 
 ## 🎓 Academic Use
 
 This project demonstrates:
-- Complete ML pipeline (data → model → deployment)
+- Complete ML pipeline (data → EDA → model → deployment)
+- Exploratory Data Analysis with statistical visualizations
 - RESTful API design
-- Database design and migrations
-- Real-time data integration
+- Database design with SQLite
+- Real-time external API integration
 - Modern web application development
 - Software engineering best practices
 
-Perfect for final year projects, ML portfolios, and learning full-stack ML development!
+---
+
+## 📝 License
+
+This project is licensed under the MIT License.
 
 ---
 

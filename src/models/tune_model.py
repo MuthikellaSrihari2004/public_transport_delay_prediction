@@ -1,24 +1,40 @@
+"""
+tune_model.py — Hyperparameter Tuning
+=======================================
+Uses RandomizedSearchCV to find optimal XGBoost parameters.
+Saves the tuned model separately from the base model.
+"""
+
 import pandas as pd
+import os
+import sys
 import joblib
+from pathlib import Path
 from sklearn.model_selection import RandomizedSearchCV
 from xgboost import XGBRegressor
 
-def hyperparameter_tuning(data_path, encoder_path):
-    print("--- Hyperparameter Tuning (Randomized Search) ---")
-    df = pd.read_csv(data_path).sample(50000) # Sample for faster tuning
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+import config
+
+
+def hyperparameter_tuning():
+    """Run randomized hyperparameter search on XGBoost."""
+    data_path = str(config.FEATURES_DATA_FILE)
+    encoder_path = str(config.LABEL_ENCODERS_PATH)
+
+    print("Starting hyperparameter tuning...")
+
+    df = pd.read_csv(data_path).sample(50000, random_state=config.RANDOM_STATE)
     encoders = joblib.load(encoder_path)
-    
-    features = ['Transport_Type', 'From_Location', 'To_Location', 'Weather', 
-                'Is_Holiday', 'Is_Peak_Hour', 'Event_Scheduled', 'Traffic_Density',
-                'Temperature_C', 'Humidity_Pct', 'Passenger_Load', 'Distance_KM',
-                'Dep_Hour', 'Day_of_Week', 'Weather_Traffic_Index']
-    
+
+    features = config.MODEL_FEATURES.copy()
     X = df[features].copy()
-    y = df['Delay_Minutes']
-    
+    y = df[config.TARGET_VARIABLE]
+
     for col, le in encoders.items():
-        X[col] = le.transform(X[col])
-        
+        if col in X.columns:
+            X[col] = le.transform(X[col])
+
     param_grid = {
         'n_estimators': [100, 200],
         'max_depth': [3, 6, 9],
@@ -26,21 +42,23 @@ def hyperparameter_tuning(data_path, encoder_path):
         'subsample': [0.8, 1.0],
         'colsample_bytree': [0.8, 1.0]
     }
-    
-    xgb = XGBRegressor(random_state=42)
-    random_search = RandomizedSearchCV(xgb, param_distributions=param_grid, 
-                                      n_iter=10, cv=3, scoring='neg_mean_absolute_error', 
-                                      verbose=1, n_jobs=-1)
-    
-    random_search.fit(X, y)
-    
-    print(f"Best Parameters: {random_search.best_params_}")
-    print(f"Best Score (MAE): {-random_search.best_score_:.2f}")
-    
-    # Save the best model
-    joblib.dump(random_search.best_estimator_, 'models/xgboost_tuned_model.pkl')
-    print("✅ Tuned model saved to models/xgboost_tuned_model.pkl")
+
+    search = RandomizedSearchCV(
+        XGBRegressor(random_state=config.RANDOM_STATE),
+        param_distributions=param_grid,
+        n_iter=10, cv=3,
+        scoring='neg_mean_absolute_error',
+        verbose=1, n_jobs=-1
+    )
+
+    search.fit(X, y)
+
+    print(f"Best Parameters: {search.best_params_}")
+    print(f"Best MAE: {-search.best_score_:.2f}")
+
+    joblib.dump(search.best_estimator_, str(config.XGBOOST_TUNED_MODEL_PATH))
+    print(f"Tuned model saved to: {config.XGBOOST_TUNED_MODEL_PATH}")
+
 
 if __name__ == "__main__":
-    hyperparameter_tuning('data/processed/hyderabad_transport_features.csv', 
-                          'models/label_encoders.pkl')
+    hyperparameter_tuning()

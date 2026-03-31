@@ -1,65 +1,73 @@
+"""
+queries.py — Database Query Utilities
+=======================================
+Provides the TransportDB class for all database read/write operations.
+"""
+
 import sqlite3
 import pandas as pd
 import sys
 from pathlib import Path
 
-# Add project root to path to import config
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import config
 
+
 class TransportDB:
+    """Database access layer for transport schedules and predictions."""
+
     def __init__(self, db_path=None):
         self.db_path = db_path or str(config.DB_PATH)
 
-    def get_conn(self):
-        """Create a database connection"""
+    def _connect(self):
+        """Create a database connection with row-factory enabled."""
         conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row  # Enable row access by name
+        conn.row_factory = sqlite3.Row
         return conn
 
     def get_locations(self):
-        """Fetch all unique locations with case-insensitive column handling"""
-        conn = self.get_conn()
-        cursor = conn.cursor()
+        """Return all unique locations sorted alphabetically."""
+        conn = self._connect()
         try:
-            # Try to fetch using whatever case the DB has
-            cursor.execute("SELECT name FROM pragma_table_info('schedules')")
-            columns = [row[0].lower() for row in cursor.fetchall()]
-            
-            from_col = "From_Location" if "from_location" in columns else "from_location"
-            to_col = "To_Location" if "to_location" in columns else "to_location"
-            
-            cursor.execute(f"SELECT DISTINCT {from_col} FROM schedules UNION SELECT DISTINCT {to_col} FROM schedules")
-            locs = [row[0] for row in cursor.fetchall() if row[0]]
-            return sorted(locs)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT DISTINCT From_Location FROM schedules "
+                "UNION "
+                "SELECT DISTINCT To_Location FROM schedules"
+            )
+            locations = sorted([row[0] for row in cursor.fetchall() if row[0]])
+            return locations
         except Exception as e:
             print(f"Error fetching locations: {e}")
-            return ["Secunderabad", "Koti", "Begumpet", "Hitech City", "Miyapur"]
+            return config.HYDERABAD_LOCATIONS[:5]
         finally:
             conn.close()
 
     def get_route_details(self, from_loc, to_loc, transport_type=None):
-        """Fetch distance and intermediate stops for a route"""
-        conn = self.get_conn()
-        cursor = conn.cursor()
+        """Fetch distance and stop details for a specific route."""
+        conn = self._connect()
         try:
             query = "SELECT * FROM schedules WHERE From_Location = ? AND To_Location = ?"
             params = [from_loc, to_loc]
-            
+
             if transport_type and transport_type.lower() != 'all':
                 query += " AND Transport_Type = ?"
                 params.append(transport_type)
-                
+
             query += " LIMIT 1"
-            
+            cursor = conn.cursor()
             cursor.execute(query, tuple(params))
             row = cursor.fetchone()
+
             if row:
                 return {k.lower(): row[k] for k in row.keys()}
-            
-            # Fallback for route details
+
+            # Fallback: try without transport type filter
             if transport_type and transport_type.lower() != 'all':
-                cursor.execute("SELECT * FROM schedules WHERE From_Location = ? AND To_Location = ? LIMIT 1", (from_loc, to_loc))
+                cursor.execute(
+                    "SELECT * FROM schedules WHERE From_Location = ? AND To_Location = ? LIMIT 1",
+                    (from_loc, to_loc)
+                )
                 row = cursor.fetchone()
                 if row:
                     return {k.lower(): row[k] for k in row.keys()}
@@ -72,93 +80,85 @@ class TransportDB:
             conn.close()
 
     def get_schedules_by_route(self, from_loc, to_loc, transport_type, date):
-        """Fetch schedules matching criteria with fallback to template dates"""
-        conn = self.get_conn()
-        
+        """Fetch schedules with automatic fallback to nearest available date."""
+        conn = self._connect()
+
         mode_filter = "AND Transport_Type = ?" if transport_type.lower() != 'all' else ""
-        
-        # 1. Try exact date match first
-        query = f"""
-        SELECT * FROM schedules 
-        WHERE From_Location = ? 
-        AND To_Location = ? 
-        {mode_filter}
-        AND Date = ?
-        ORDER BY Scheduled_Departure ASC
+
+        base_query = f"""
+            SELECT * FROM schedules
+            WHERE From_Location = ? AND To_Location = ?
+            {mode_filter} AND Date = ?
+            ORDER BY Scheduled_Departure ASC
         """
-        
-        params = [from_loc, to_loc]
-        if transport_type.lower() != 'all':
-            params.append(transport_type)
-        params.append(date)
-        
-        df = pd.read_sql_query(query, conn, params=tuple(params))
-        
-        # 2. Fallback: Template Date
+
+        def build_params(date_val):
+            params = [from_loc, to_loc]
+            if transport_type.lower() != 'all':
+                params.append(transport_type)
+            params.append(date_val)
+            return tuple(params)
+
+        # 1. Try exact date match
+        df = pd.read_sql_query(base_query, conn, params=build_params(date))
+
+        # 2. Fallback: use nearest available date for this route + mode
         if df.empty:
             cursor = conn.cursor()
-            check_q = f"SELECT DISTINCT Date FROM schedules WHERE From_Location = ? AND To_Location = ? {mode_filter} ORDER BY Date DESC LIMIT 1"
-            check_params = [from_loc, to_loc]
+            find_date_query = f"""
+                SELECT DISTINCT Date FROM schedules
+                WHERE From_Location = ? AND To_Location = ? {mode_filter}
+                ORDER BY Date DESC LIMIT 1
+            """
+            find_params = [from_loc, to_loc]
             if transport_type.lower() != 'all':
-                check_params.append(transport_type)
-            
-            cursor.execute(check_q, tuple(check_params))
+                find_params.append(transport_type)
+
+            cursor.execute(find_date_query, tuple(find_params))
             row = cursor.fetchone()
-            
             if row:
-                template_date = row[0]
-                df_params = [from_loc, to_loc]
-                if transport_type.lower() != 'all':
-                    df_params.append(transport_type)
-                df_params.append(template_date)
-                df = pd.read_sql_query(query, conn, params=tuple(df_params))
-                
-            # 3. Fallback: ANY mode if specific mode failed
-            if df.empty and transport_type.lower() != 'all':
-                alt_query = """
-                SELECT * FROM schedules 
-                WHERE From_Location = ? 
-                AND To_Location = ? 
-                AND Date = ?
+                df = pd.read_sql_query(base_query, conn, params=build_params(row[0]))
+
+        # 3. Fallback: try any transport mode
+        if df.empty and transport_type.lower() != 'all':
+            any_mode_query = """
+                SELECT * FROM schedules
+                WHERE From_Location = ? AND To_Location = ? AND Date = ?
                 ORDER BY Scheduled_Departure ASC
-                """
-                df = pd.read_sql_query(alt_query, conn, params=(from_loc, to_loc, date))
-                
-                # 4. Fallback: ANY mode, template date
-                if df.empty:
-                    check_q_alt = "SELECT DISTINCT Date FROM schedules WHERE From_Location = ? AND To_Location = ? ORDER BY Date DESC LIMIT 1"
-                    cursor.execute(check_q_alt, (from_loc, to_loc))
-                    row_alt = cursor.fetchone()
-                    if row_alt:
-                        template_alt = row_alt[0]
-                        df = pd.read_sql_query(alt_query, conn, params=(from_loc, to_loc, template_alt))
-        
+            """
+            df = pd.read_sql_query(any_mode_query, conn, params=(from_loc, to_loc, date))
+
+            # 4. Any mode + nearest date
+            if df.empty:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT DISTINCT Date FROM schedules WHERE From_Location = ? AND To_Location = ? ORDER BY Date DESC LIMIT 1",
+                    (from_loc, to_loc)
+                )
+                row = cursor.fetchone()
+                if row:
+                    df = pd.read_sql_query(any_mode_query, conn, params=(from_loc, to_loc, row[0]))
+
         conn.close()
         return df
 
     def save_prediction(self, from_loc, to_loc, t_type, sched_time, delay, reason):
-        """Audit log for predictions made via the application"""
-        conn = self.get_conn()
-        cursor = conn.cursor()
+        """Save a prediction to the audit log."""
+        conn = self._connect()
         try:
-            cursor.execute("""
-            INSERT INTO predictions (from_location, to_location, transport_type, scheduled_time, predicted_delay, reason)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """, (from_loc, to_loc, t_type, sched_time, delay, reason))
+            conn.cursor().execute(
+                "INSERT INTO predictions (from_location, to_location, transport_type, scheduled_time, predicted_delay, reason) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (from_loc, to_loc, t_type, sched_time, delay, reason)
+            )
             conn.commit()
         except Exception as e:
-            print(f"❌ Error saving prediction audit: {e}")
+            print(f"Error saving prediction: {e}")
         finally:
             conn.close()
 
-    def get_recent_predictions(self, limit=10):
-        """Fetch recent prediction history"""
-        query = "SELECT * FROM predictions ORDER BY timestamp DESC LIMIT ?"
-        conn = self.get_conn()
-        df = pd.read_sql_query(query, conn, params=(limit,))
-        conn.close()
-        return df
 
 if __name__ == "__main__":
     db = TransportDB()
-    print(f"🗄️ Database Utilities connected to: {db.db_path}")
+    print(f"Database: {db.db_path}")
+    print(f"Locations: {db.get_locations()[:5]}...")

@@ -1,53 +1,53 @@
+"""
+app.py — Flask Web Application
+================================
+Routes for the HyderTrax transport delay prediction web interface.
+"""
+
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 import os
 import sys
-from datetime import datetime, timedelta
 import sqlite3
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-# Load Env
 load_dotenv()
-
-# Path Setup
 sys.path.append(os.getcwd())
 
 import config
-
-# Ensure directories exist (Critical for Gunicorn/Render)
 config.ensure_directories()
 
-try:
-    from src.database.queries import TransportDB
-    from src.models.engine import ENGINE
-except ImportError:
-    # Fallback to local import if running from root
-    from src.database.queries import TransportDB
-    from src.models.engine import ENGINE
+from src.database.queries import TransportDB
+from src.models.engine import ENGINE
+
+# ── App Setup ───────────────────────────────────────────────────────────
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "hyder-transit-secret-key")
+app.secret_key = config.SECRET_KEY
 
-# Initialize DB with explicit check
 DB = TransportDB()
-if not os.path.exists(config.DB_PATH):
-    print(f"CRITICAL WARNING: Database file not found at {config.DB_PATH}")
 
-def get_now_ist():
-    return config.get_now_ist()
+# Location name aliases (handles common user input variations)
+LOCATION_ALIASES = {"Lb Nagar": "L.B. Nagar", "Hi-Tech City": "Hitech City"}
 
-def get_live_env():
-    """Shared helper to get rich system context for any page"""
+
+def _normalize_location(name):
+    """Apply location aliases to user input."""
+    return LOCATION_ALIASES.get(name, name)
+
+
+def _get_live_env():
+    """Build real-time environment context for templates."""
     weather = ENGINE.get_realtime_weather()
-    now = get_now_ist()
+    now = config.get_now_ist()
     hour = now.hour
     date_str = now.strftime("%Y-%m-%d")
-    
+
     holiday_name = ENGINE._check_holidays(date_str)
     event_flag = ENGINE._check_events(date_str)
     traffic = ENGINE._get_traffic(hour, weather['is_rainy'], event_flag)
-    
     is_peak = (8 <= hour <= 11 or 17 <= hour <= 20)
-    
+
     return {
         "weather": weather,
         "ctx": {
@@ -63,104 +63,93 @@ def get_live_env():
         "event_flag": event_flag
     }
 
-# Route: Home Page
+
+# ── Page Routes ─────────────────────────────────────────────────────────
+
 @app.route('/')
 def index():
-    live_env = get_live_env()
-    return render_template('index.html', live_env=live_env, today_date=get_now_ist().strftime("%Y-%m-%d"))
+    return render_template('index.html',
+                           live_env=_get_live_env(),
+                           today_date=config.get_now_ist().strftime("%Y-%m-%d"))
 
 
-# Route: Manual Prediction Page
 @app.route('/predict')
 def prediction_page():
-    return render_template('prediction.html', 
-                          today_date=get_now_ist().strftime("%Y-%m-%d"),
-                          live_env=get_live_env())
+    return render_template('prediction.html',
+                           today_date=config.get_now_ist().strftime("%Y-%m-%d"),
+                           live_env=_get_live_env())
 
-# API: Search (Used by Prediction Page) & Form Post
+
+@app.route('/map')
+def live_map():
+    return render_template('map.html', live_env=_get_live_env())
+
+
+@app.route('/analytics')
+def analytics():
+    return render_template('analytics.html', live_env=_get_live_env())
+
+
+# ── Search Routes ───────────────────────────────────────────────────────
+
 @app.route('/search', methods=['POST'])
 def search():
-    from_loc = request.form.get('from_location', '').strip().title()
-    to_loc = request.form.get('to_location', '').strip().title()
-    date_str = request.form.get('travel_date', '')
-    if not date_str:
-        date_str = get_now_ist().strftime("%Y-%m-%d")
+    """Form-based search — returns rendered HTML page."""
+    from_loc = _normalize_location(request.form.get('from_location', '').strip().title())
+    to_loc = _normalize_location(request.form.get('to_location', '').strip().title())
+    date_str = request.form.get('travel_date', '') or config.get_now_ist().strftime("%Y-%m-%d")
     t_type = request.form.get('transport_type', 'Bus')
-    
-    # Name Mapping
-    mapping = {"Lb Nagar": "L.B. Nagar", "Hi-Tech City": "Hitech City"}
-    from_loc = mapping.get(from_loc, from_loc)
-    to_loc = mapping.get(to_loc, to_loc)
 
-    # Date Logic
-    # Pass requested date directly; DB now handles fallback to templates
-    mapped_date = date_str
+    schedules_df = DB.get_schedules_by_route(from_loc, to_loc, t_type, date_str)
+    live_env = _get_live_env()
 
-    # 1. Get Schedules
-    schedules_df = DB.get_schedules_by_route(from_loc, to_loc, t_type, mapped_date)
-    
-    live_env = get_live_env()
-
-
-    # Detect if fallback occurred (mixed modes)
+    # Warn if requested mode was unavailable but alternatives exist
     if not schedules_df.empty:
         unique_modes = schedules_df['Transport_Type'].unique()
-        if t_type not in unique_modes and len(unique_modes) > 0:
-            flash(f"Requested mode '{t_type}' unavailable. Showing available alternatives.", "warning")
-            # t_type = "Any"  # Keep user selection for UI consistency
+        if t_type not in unique_modes:
+            flash(f"Requested mode '{t_type}' unavailable. Showing alternatives.", "warning")
 
     if schedules_df.empty:
-        return render_template('index.html', error=f"No services found for this specific route on {date_str}. Try popular routes like Secunderabad to Miyapur.", live_env=live_env, travel_date=date_str)
+        return render_template('index.html',
+                               error=f"No services found for this route on {date_str}.",
+                               live_env=live_env, travel_date=date_str)
 
-    # 2. Process Batch using Engine (Enforces Distribution)
-    schedules_raw = schedules_df.to_dict('records')
-    schedules = ENGINE.process_batch(schedules_raw, date_str)
+    schedules = ENGINE.process_batch(schedules_df.to_dict('records'), date_str)
 
-    return render_template('index.html', 
-                          schedules=schedules, 
-                          from_loc=from_loc, 
-                          to_loc=to_loc,
-                          travel_date=date_str,
-                          t_type=t_type,
-                          live_env=live_env)
+    return render_template('index.html',
+                           schedules=schedules,
+                           from_loc=from_loc, to_loc=to_loc,
+                           travel_date=date_str, t_type=t_type,
+                           live_env=live_env)
+
 
 @app.route('/api/search', methods=['POST'])
 def api_search():
-    # Logic for Prediction Page JSON API
+    """JSON API search — returns prediction data."""
     data = request.json
-    from_loc = data.get('from', '').strip().title()
-    to_loc = data.get('to', '').strip().title()
-    date_str = data.get('date', '')
-    if not date_str:
-        date_str = get_now_ist().strftime("%Y-%m-%d")
+    from_loc = _normalize_location(data.get('from', '').strip().title())
+    to_loc = _normalize_location(data.get('to', '').strip().title())
+    date_str = data.get('date', '') or config.get_now_ist().strftime("%Y-%m-%d")
     t_type = data.get('type', 'Bus')
-    
-    mapping = {"Lb Nagar": "L.B. Nagar", "Hi-Tech City": "Hitech City"}
-    from_loc = mapping.get(from_loc, from_loc)
-    to_loc = mapping.get(to_loc, to_loc)
 
-    mapped_date = date_str
+    schedules_df = DB.get_schedules_by_route(from_loc, to_loc, t_type, date_str)
 
-    schedules_df = DB.get_schedules_by_route(from_loc, to_loc, t_type, mapped_date)
-    
     if schedules_df.empty:
         return {"error": "No services found"}, 404
-        
-    schedules_raw = schedules_df.to_dict('records')
-    # Use same batch process
-    schedules = ENGINE.process_batch(schedules_raw, date_str)
-    
-    # Extract one sample for the "Representative Insight" box
-    # We pick the one with highest delay to show 'worst case' or average?
-    # Let's pick the first one.
-    sample = schedules[0]['prediction']
-    
+
+    schedules = ENGINE.process_batch(schedules_df.to_dict('records'), date_str)
+
     return {
         "schedules": schedules,
-        "representative_insight": sample
+        "representative_insight": schedules[0]['prediction']
     }
 
+
+# ── Tracking Routes ─────────────────────────────────────────────────────
+
 def _get_tracking_data(service_id, travel_date):
+    """Build complete tracking data for a single service."""
+    # Fetch service from database
     try:
         conn = sqlite3.connect(config.DB_PATH)
         conn.row_factory = sqlite3.Row
@@ -169,106 +158,94 @@ def _get_tracking_data(service_id, travel_date):
         service = cursor.fetchone()
         conn.close()
     except Exception as e:
-        print(f"Error connecting to database: {e}")
+        print(f"Database error: {e}")
         return None
 
-    if not service: return None
+    if not service:
+        return None
 
-    svc_dict = dict(service)
-    pred = ENGINE.predict_one(svc_dict, travel_date)
-    
-    sch_dep = svc_dict['Scheduled_Departure']
+    svc = dict(service)
+    pred = ENGINE.predict_one(svc, travel_date)
+
+    # Parse departure time
+    sch_dep = svc['Scheduled_Departure']
     try:
         base_dt = datetime.strptime(f"{travel_date} {sch_dep}", "%Y-%m-%d %H:%M")
-    except:
-        base_dt = get_now_ist()
-        
-    start_var = 0 if pred['predicted_delay'] == 0 else 2
-    actual_start = base_dt + timedelta(minutes=start_var)
-    
-    # Duration Logic: Synchronize with Engine
-    scheduled_arrival_str = pred.get('scheduled_arrival', '10:00')
-    predicted_arrival_str = pred.get('predicted_arrival', '10:00')
-    
+    except ValueError:
+        base_dt = config.get_now_ist()
+
+    # Calculate journey duration
+    scheduled_arrival = pred.get('scheduled_arrival', '10:00')
+    predicted_arrival = pred.get('predicted_arrival', '10:00')
+
     try:
-        arr_dt = datetime.strptime(f"{travel_date} {scheduled_arrival_str}", "%Y-%m-%d %H:%M")
-        dur = int((arr_dt - base_dt).total_seconds() / 60)
-        if dur <= 0: raise ValueError
-    except:
-        dur = 30 # absolute fallback
-    
-    # Stops logic
-    stops = []
-    raw_stops = svc_dict.get('Stops', '').split('|')
-    now = get_now_ist()
+        arr_dt = datetime.strptime(f"{travel_date} {scheduled_arrival}", "%Y-%m-%d %H:%M")
+        duration = int((arr_dt - base_dt).total_seconds() / 60)
+        if duration <= 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        duration = 30
+
+    # Build stop timeline
+    now = config.get_now_ist()
     try:
-        chk_dt = datetime.strptime(travel_date, "%Y-%m-%d").date()
-    except:
-        chk_dt = now.date()
-        
-    is_today = (chk_dt == now.date())
-    is_past = (chk_dt < now.date())
-    is_future = (chk_dt > now.date())
-    
-    # First pass: compute all estimated times for each stop
+        check_date = datetime.strptime(travel_date, "%Y-%m-%d").date()
+    except ValueError:
+        check_date = now.date()
+
+    is_today = (check_date == now.date())
+    is_past = (check_date < now.date())
+    is_future = (check_date > now.date())
+
+    raw_stops = svc.get('Stops', '').split('|')
+    num_stops = max(1, len(raw_stops) - 1)
+
+    # First pass: compute estimated times for each stop
     stop_data = []
-    for i, s_name in enumerate(raw_stops):
-        sched_offset = int(i * (dur / max(1, len(raw_stops)-1)))
+    for i, stop_name in enumerate(raw_stops):
+        sched_offset = int(i * (duration / num_stops))
         sched_time = base_dt + timedelta(minutes=sched_offset)
-        delay_at_stop = int(i * (pred['predicted_delay'] / max(1, len(raw_stops)-1)))
+        delay_at_stop = int(i * (pred['predicted_delay'] / num_stops))
         est_time = base_dt + timedelta(minutes=sched_offset + delay_at_stop)
-        stop_data.append({
-            "name": s_name,
-            "sched_time": sched_time,
-            "est_time": est_time,
-        })
-    
-    # Second pass: determine which stop is the current active one based on estimated times
+        stop_data.append({"name": stop_name, "sched_time": sched_time, "est_time": est_time})
+
+    # Second pass: determine active stop index
     active_index = -1
     if is_today:
-        # Find the current position: the vehicle is at the last stop whose est_time has passed,
-        # or approaching the first stop whose est_time hasn't passed yet
-        last_passed_idx = -1
+        last_passed = -1
         for i, sd in enumerate(stop_data):
             if now >= sd['est_time']:
-                last_passed_idx = i
-        
-        if last_passed_idx == -1:
-            # Haven't reached first stop yet - mark first stop as active (approaching)
+                last_passed = i
+        if last_passed == -1:
             active_index = 0
-        elif last_passed_idx == len(stop_data) - 1:
-            # Passed all stops - journey complete, mark last as active
-            active_index = last_passed_idx
+        elif last_passed == len(stop_data) - 1:
+            active_index = last_passed
         else:
-            # Between stops - mark the next upcoming stop as active
-            active_index = last_passed_idx + 1
+            active_index = last_passed + 1
     elif is_future:
-        # For future dates, mark the first stop as active
         active_index = 0
-    # For past dates, all stops are departed, no active stop needed
-    
+
+    # Third pass: build final stop list with status
+    stops = []
     for i, sd in enumerate(stop_data):
-        status = "Upcoming"
-        is_passed = False
         is_current = (i == active_index)
-        
+        is_passed = False
+
         if is_today:
             if i < active_index:
-                status = "Departed"
-                is_passed = True
+                status, is_passed = "Departed", True
             elif is_current:
                 status = "At Station"
             else:
                 status = "Upcoming"
         elif is_past:
-            status = "Departed" if i < len(stop_data)-1 else "Reached"
+            status = "Reached" if i == len(stop_data) - 1 else "Departed"
             is_passed = True
         elif is_future:
-            if is_current:
-                status = "Boarding"
-            else:
-                status = "Upcoming"
-        
+            status = "Boarding" if is_current else "Upcoming"
+        else:
+            status = "Upcoming"
+
         stops.append({
             "name": sd['name'],
             "est": sd['est_time'].strftime("%H:%M"),
@@ -279,90 +256,70 @@ def _get_tracking_data(service_id, travel_date):
         })
 
     return {
-        "service": svc_dict,
+        "service": svc,
         "info": {
-            "Service_ID": svc_dict['Service_ID'],
+            "Service_ID": svc['Service_ID'],
             "Start_Time": base_dt.strftime("%H:%M"),
-            "Sched_Reach": scheduled_arrival_str,
-            "Reach_Time": predicted_arrival_str,
-            "From_Location": svc_dict['From_Location'],
-            "To_Location": svc_dict['To_Location'],
-            "Transport_Type": svc_dict['Transport_Type'],
-            "Is_Live": is_today and any(s['is_current'] or s['is_passed'] for s in stops) and not all(s['is_passed'] for s in stops)
+            "Sched_Reach": scheduled_arrival,
+            "Reach_Time": predicted_arrival,
+            "From_Location": svc['From_Location'],
+            "To_Location": svc['To_Location'],
+            "Transport_Type": svc['Transport_Type'],
+            "Is_Live": is_today and any(s['is_current'] or s['is_passed'] for s in stops)
+                       and not all(s['is_passed'] for s in stops)
         },
         "insights": pred,
         "stops": stops,
         "now_time": now.strftime('%H:%M:%S')
     }
 
+
 @app.route('/track/<int:service_id>')
 def track(service_id):
-    travel_date = request.args.get('date', '')
-    if not travel_date:
-        travel_date = get_now_ist().strftime("%Y-%m-%d")
+    travel_date = request.args.get('date', '') or config.get_now_ist().strftime("%Y-%m-%d")
     data = _get_tracking_data(service_id, travel_date)
     if not data:
         return redirect(url_for('index'))
-    data['live_env'] = get_live_env()
+    data['live_env'] = _get_live_env()
     return render_template('schedule.html', **data)
+
 
 @app.route('/api/track/<int:service_id>')
 def api_track(service_id):
-    travel_date = request.args.get('date', '')
-    if not travel_date:
-        travel_date = get_now_ist().strftime("%Y-%m-%d")
+    travel_date = request.args.get('date', '') or config.get_now_ist().strftime("%Y-%m-%d")
     data = _get_tracking_data(service_id, travel_date)
     if not data:
         return {"error": "Not Found"}, 404
     return data
 
 
-@app.route('/map')
-def live_map():
-    live_env = get_live_env()
-    return render_template('map.html', live_env=live_env)
+# ── Utility API Routes ──────────────────────────────────────────────────
 
 @app.route('/api/route', methods=['POST'])
 def api_route_details():
     data = request.json
-    from_loc = data.get('from', '').strip()
-    to_loc = data.get('to', '').strip()
+    from_loc = _normalize_location(data.get('from', '').strip())
+    to_loc = _normalize_location(data.get('to', '').strip())
     mode = data.get('mode')
-    
-    # Handle mappings if client sends old versions
-    mapping = {"Lb Nagar": "L.B. Nagar", "Hi-Tech City": "Hitech City"}
-    from_loc = mapping.get(from_loc, from_loc)
-    to_loc = mapping.get(to_loc, to_loc)
-    
+
     details = DB.get_route_details(from_loc, to_loc, mode)
     if not details:
-        # Try title case just in case
         details = DB.get_route_details(from_loc.title(), to_loc.title(), mode)
-        
     if not details:
-        return {"error": "Route not found in database intelligence."}, 404
-    
+        return {"error": "Route not found."}, 404
+
     return details
-
-
 
 
 @app.route('/api/locations')
 def api_locations():
-    """Return all unique locations from the database for autocomplete"""
-    locations = DB.get_locations()
-    return jsonify(locations)
+    """Return all unique locations for autocomplete."""
+    return jsonify(DB.get_locations())
 
 
-@app.route('/analytics')
-def analytics():
-    live_env = get_live_env()
-    return render_template('analytics.html', live_env=live_env)
-
-
+# ── Entry Point ─────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
     from src.database.db_config import init_db
-    config.ensure_directories()
     init_db()
-    app.run(debug=True, port=8000)
+    app.run(debug=True, port=config.FLASK_PORT)
